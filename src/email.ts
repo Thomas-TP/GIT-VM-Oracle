@@ -76,12 +76,12 @@ export async function notifyUserRejected(env: Env, to: string, reqId: number, no
   await sendMail(env, { to, subject: `Demande #${reqId} refusée`, title: 'Demande refusée', message });
 }
 
-export async function notifyUserReady(env: Env, to: string, reqId: number, ip: string) {
+export async function notifyUserReady(env: Env, to: string, reqId: number, ip: string, sshUser = 'ubuntu') {
   const message =
     `Ta VM #${reqId} est active et prête à l'emploi. 🎉\n\n` +
     `IP publique : ${ip}\n` +
     `Connexion SSH :\n` +
-    `ssh -i vm-portal-req-${reqId}.pem ubuntu@${ip}\n\n` +
+    `ssh -i vm-portal-req-${reqId}.pem ${sshUser}@${ip}\n\n` +
     `Télécharge d'abord ta clé privée depuis le portail (bouton ci-dessous). ` +
     `La clé n'est accessible que par toi.`;
   await sendMail(env, { to, subject: `VM #${reqId} prête`, title: 'Ta VM est prête 🚀', message });

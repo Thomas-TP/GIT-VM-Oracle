@@ -1,4 +1,4 @@
-import type { Preset, User, VmRequest, Status } from './types';
+import type { PresetCatalog, User, VmRequest, Status } from './types';
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -27,11 +27,14 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   me: () => req<{ user: User }>('/api/me').then((r) => r.user),
-  presets: () => req<{ presets: Preset[]; region: string }>('/api/presets'),
+  presets: () => req<PresetCatalog>('/api/presets'),
 
   listRequests: () => req<{ requests: VmRequest[] }>('/api/requests').then((r) => r.requests),
-  createRequest: (preset: string, purpose: string) =>
-    req<{ id: number }>('/api/requests', { method: 'POST', body: JSON.stringify({ preset, purpose }) }),
+  createRequest: (perf: string, storage: string, os: string, purpose: string) =>
+    req<{ id: number }>('/api/requests', {
+      method: 'POST',
+      body: JSON.stringify({ perf, storage, os, purpose }),
+    }),
   getRequest: (id: number) => req<{ request: VmRequest }>(`/api/requests/${id}`).then((r) => r.request),
   terminate: (id: number) => req<{ ok: true }>(`/api/requests/${id}/terminate`, { method: 'POST' }),
   keyUrl: (id: number) => `/api/requests/${id}/key`,

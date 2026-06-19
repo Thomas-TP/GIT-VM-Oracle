@@ -28,13 +28,16 @@ export async function createRequest(
   env: Env,
   email: string,
   purpose: string,
-  preset: string,
+  perf: string,
+  storage: string,
+  os: string,
   region: string
 ): Promise<number> {
   const res = await env.DB.prepare(
-    `INSERT INTO vm_requests (user_email, purpose, preset, region) VALUES (?1, ?2, ?3, ?4)`
+    `INSERT INTO vm_requests (user_email, purpose, preset, storage, os, region)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
   )
-    .bind(email, purpose, preset, region)
+    .bind(email, purpose, perf, storage, os, region)
     .run();
   return res.meta.last_row_id as number;
 }
@@ -92,7 +95,7 @@ export interface RequestDetail extends VmRequestRow {
 export async function getRequestDetail(env: Env, id: number): Promise<RequestDetail | null> {
   return await env.DB.prepare(
     `SELECT r.*, v.public_ip AS public_ip, v.ssh_key_name AS ssh_key_name,
-            v.aws_instance_id AS aws_instance_id, v.state AS vm_state,
+            v.ssh_user AS ssh_user, v.aws_instance_id AS aws_instance_id, v.state AS vm_state,
             (v.ssh_private_key IS NOT NULL) AS has_key
        FROM vm_requests r
        LEFT JOIN vms v ON v.request_id = r.id
@@ -116,13 +119,14 @@ export async function createVm(
   requestId: number,
   instanceId: string,
   keyName: string,
-  encryptedPrivateKey: string
+  encryptedPrivateKey: string,
+  sshUser: string
 ): Promise<void> {
   await env.DB.prepare(
-    `INSERT INTO vms (request_id, aws_instance_id, state, ssh_key_name, ssh_private_key)
-     VALUES (?1, ?2, 'pending', ?3, ?4)`
+    `INSERT INTO vms (request_id, aws_instance_id, state, ssh_key_name, ssh_private_key, ssh_user)
+     VALUES (?1, ?2, 'pending', ?3, ?4, ?5)`
   )
-    .bind(requestId, instanceId, keyName, encryptedPrivateKey)
+    .bind(requestId, instanceId, keyName, encryptedPrivateKey, sshUser)
     .run();
 }
 

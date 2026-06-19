@@ -3,7 +3,16 @@ import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Env, SessionUser } from './types';
 import { signToken, verifyToken, randomToken, encryptSecret, decryptSecret } from './crypto';
 import { authorizeUrl, exchangeCode, userFromIdToken } from './oidc';
-import { isValidPreset, PRESETS } from './presets';
+import {
+  PERF,
+  STORAGE,
+  OS,
+  isValidPerf,
+  isValidStorage,
+  isValidOs,
+  estimateMonthlyUsd,
+  STORAGE_USD_GB_MONTH,
+} from './presets';
 import {
   upsertUser,
   audit,
@@ -100,7 +109,15 @@ app.get('/api/me', async (c) => {
   return c.json({ user });
 });
 
-app.get('/api/presets', (c) => c.json({ presets: Object.values(PRESETS), region: c.env.AWS_REGION }));
+app.get('/api/presets', (c) =>
+  c.json({
+    perf: Object.values(PERF),
+    storage: Object.values(STORAGE),
+    os: Object.values(OS),
+    storageUsdGbMonth: STORAGE_USD_GB_MONTH,
+    region: c.env.AWS_REGION,
+  })
+);
 
 app.get('/api/requests', apiAuth, async (c) => {
   const rows = await listRequestsForUser(c.env, c.get('user').email);
@@ -110,12 +127,16 @@ app.get('/api/requests', apiAuth, async (c) => {
 app.post('/api/requests', apiAuth, async (c) => {
   const user = c.get('user');
   const body = await c.req.json().catch(() => ({}));
-  const preset = String(body.preset ?? '');
+  const perf = String(body.perf ?? '');
+  const storage = String(body.storage ?? '');
+  const os = String(body.os ?? '');
   const purpose = String(body.purpose ?? '').trim();
-  if (!isValidPreset(preset) || !purpose) return c.json({ error: 'invalid_request' }, 400);
-  const id = await createRequest(c.env, user.email, purpose, preset, c.env.AWS_REGION);
-  await audit(c.env, user.email, 'request.create', `req:${id}`, preset);
-  c.executionCtx.waitUntil(notifyAdminsNewRequest(c.env, id, user.email, preset));
+  if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !purpose) {
+    return c.json({ error: 'invalid_request' }, 400);
+  }
+  const id = await createRequest(c.env, user.email, purpose, perf, storage, os, c.env.AWS_REGION);
+  await audit(c.env, user.email, 'request.create', `req:${id}`, `${perf}/${storage}/${os}`);
+  c.executionCtx.waitUntil(notifyAdminsNewRequest(c.env, id, user.email, PERF[perf].label));
   return c.json({ id }, 201);
 });
 
@@ -185,10 +206,21 @@ app.post('/api/admin/requests/:id/approve', apiAdmin, async (c) => {
   await setRequestStatus(c.env, id, 'provisioning', admin.email);
   await audit(c.env, admin.email, 'request.approve', `req:${id}`);
   try {
+    const perf = PERF[req.preset];
+    const os = OS[req.os ?? ''];
+    const storage = STORAGE[req.storage ?? ''];
+    if (!perf || !os || !storage) throw new Error('invalid preset composition');
+
     const kp = await createKeyPair(c.env, id);
     const encKey = await encryptSecret(c.env.SESSION_SECRET, kp.privateKey);
-    const { instanceId } = await launchInstance(c.env, id, req.preset, kp.keyName);
-    await createVm(c.env, id, instanceId, kp.keyName, encKey);
+    const { instanceId } = await launchInstance(c.env, {
+      requestId: id,
+      keyName: kp.keyName,
+      instanceType: perf.instanceType,
+      amiId: os.ami,
+      sizeGb: storage.sizeGb,
+    });
+    await createVm(c.env, id, instanceId, kp.keyName, encKey, os.sshUser);
     await audit(c.env, admin.email, 'vm.launch', `req:${id}`, instanceId);
     c.executionCtx.waitUntil(notifyUserApproved(c.env, req.user_email, id));
     return c.json({ ok: true, status: 'provisioning' });
@@ -227,7 +259,7 @@ async function pollProvisioning(env: Env): Promise<void> {
         await updateVm(env, req.id, 'running', status.publicIp);
         await setRequestStatus(env, req.id, 'active');
         await audit(env, 'system', 'vm.active', `req:${req.id}`, status.publicIp);
-        await notifyUserReady(env, req.user_email, req.id, status.publicIp);
+        await notifyUserReady(env, req.user_email, req.id, status.publicIp, vm.ssh_user ?? 'ubuntu');
       } else {
         await updateVm(env, req.id, status.state);
       }

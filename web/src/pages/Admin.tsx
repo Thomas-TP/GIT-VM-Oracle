@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
-import type { Preset, Status, VmRequest } from '../types';
+import type { PerfPreset, Status, VmRequest } from '../types';
 import { Button, Card, Field, Modal, Select, Spinner, Textarea } from '../ui';
 import { RequestsTable } from '../components/RequestsTable';
 
@@ -36,8 +36,8 @@ export function Admin() {
   });
 
   const presetMap = useMemo(() => {
-    const m: Record<string, Preset> = {};
-    presetsQ.data?.presets.forEach((p) => (m[p.id] = p));
+    const m: Record<string, PerfPreset> = {};
+    presetsQ.data?.perf.forEach((p) => (m[p.id] = p));
     return m;
   }, [presetsQ.data]);
 

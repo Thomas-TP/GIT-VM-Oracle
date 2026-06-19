@@ -53,6 +53,7 @@ export function RequestDetail() {
     queryFn: () => api.getRequest(rid),
     refetchInterval: (query) => (query.state.data?.status === 'provisioning' ? 5000 : false),
   });
+  const presetsQ = useQuery({ queryKey: ['presets'], queryFn: api.presets });
 
   const termM = useMutation({
     mutationFn: () => api.terminate(rid),
@@ -80,8 +81,13 @@ export function RequestDetail() {
     );
 
   const r = q.data;
+  const cat = presetsQ.data;
+  const perfLabel = cat?.perf.find((p) => p.id === r.preset)?.label ?? r.preset;
+  const storageLabel = cat?.storage.find((s) => s.id === r.storage)?.label ?? r.storage ?? '—';
+  const osLabel = cat?.os.find((o) => o.id === r.os)?.label ?? r.os ?? '—';
+  const sshUser = r.ssh_user ?? 'ubuntu';
   const canTerm = r.status === 'active' || r.status === 'provisioning' || r.status === 'failed';
-  const cmd = r.public_ip ? `ssh -i ${r.ssh_key_name ?? `vm-portal-req-${r.id}`}.pem ubuntu@${r.public_ip}` : '';
+  const cmd = r.public_ip ? `ssh -i ${r.ssh_key_name ?? `vm-portal-req-${r.id}`}.pem ${sshUser}@${r.public_ip}` : '';
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -105,7 +111,9 @@ export function RequestDetail() {
         <Card className="p-5">
           <Eyebrow>{t('detail.overview')}</Eyebrow>
           <div className="divide-y divide-border">
-            <Row label={t('table.type')}>{r.preset}</Row>
+            <Row label={t('table.type')}>{perfLabel}</Row>
+            <Row label={t('form.storage')}>{storageLabel}</Row>
+            <Row label={t('form.os')}>{osLabel}</Row>
             <Row label={t('common.region')} mono>{r.region}</Row>
             <Row label={t('table.purpose')}>{r.purpose}</Row>
             <Row label={t('detail.requestedBy')}>{r.user_email}</Row>

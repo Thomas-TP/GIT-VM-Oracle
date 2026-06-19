@@ -49,11 +49,15 @@ const fr = {
   },
   form: {
     title: 'Demander une machine virtuelle',
-    preset: 'Type de VM',
+    perf: 'Performance',
+    storage: 'Stockage',
+    os: 'Système',
     purpose: 'Usage / justification',
     purposePlaceholder: 'ex. environnement de test pour le backend',
     submit: 'Envoyer la demande',
     submitting: 'Envoi…',
+    estCost: 'Coût estimé (24/7)',
+    month: 'mois',
   },
   access: {
     provisioning: 'Création en cours…',
@@ -155,11 +159,15 @@ const en: typeof fr = {
   },
   form: {
     title: 'Request a virtual machine',
-    preset: 'VM type',
+    perf: 'Performance',
+    storage: 'Storage',
+    os: 'Operating system',
     purpose: 'Purpose / justification',
     purposePlaceholder: 'e.g. test environment for the backend',
     submit: 'Submit request',
     submitting: 'Submitting…',
+    estCost: 'Estimated cost (24/7)',
+    month: 'month',
   },
   access: {
     provisioning: 'Provisioning…',
@@ -213,9 +221,15 @@ const en: typeof fr = {
   },
 };
 
+function detectLng(): 'fr' | 'en' {
+  const saved = localStorage.getItem('lang');
+  if (saved === 'fr' || saved === 'en') return saved;
+  return (navigator.language || 'fr').toLowerCase().startsWith('en') ? 'en' : 'fr';
+}
+
 i18n.use(initReactI18next).init({
   resources: { fr: { translation: fr }, en: { translation: en } },
-  lng: localStorage.getItem('lang') || 'fr',
+  lng: detectLng(),
   fallbackLng: 'en',
   interpolation: { escapeValue: false },
 });

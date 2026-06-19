@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import type { Preset, VmRequest } from '../types';
+import type { PerfPreset, VmRequest } from '../types';
 import { fmtDate } from '../lib/format';
 import { StatusBadge } from './StatusBadge';
 import { IconCheck, IconDownload, IconServer, IconTrash, IconX, Spinner } from '../ui';
@@ -8,7 +8,7 @@ import { api } from '../api';
 
 interface Props {
   rows: VmRequest[];
-  presets: Record<string, Preset>;
+  presets: Record<string, PerfPreset>;
   admin?: boolean;
   busyId?: number | null;
   onApprove?: (id: number) => void;

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
-import type { Preset, VmRequest } from '../types';
+import type { PerfPreset, VmRequest } from '../types';
 import { Button, IconPlus, IconServer, Modal, Spinner } from '../ui';
 import { RequestsTable } from '../components/RequestsTable';
 import { NewRequestDialog } from '../components/NewRequestDialog';
@@ -22,8 +22,8 @@ export function Dashboard() {
   });
 
   const presetMap = useMemo(() => {
-    const m: Record<string, Preset> = {};
-    presetsQ.data?.presets.forEach((p) => (m[p.id] = p));
+    const m: Record<string, PerfPreset> = {};
+    presetsQ.data?.perf.forEach((p) => (m[p.id] = p));
     return m;
   }, [presetsQ.data]);
 
@@ -83,7 +83,7 @@ export function Dashboard() {
       )}
 
       {presetsQ.data && (
-        <NewRequestDialog open={openNew} onClose={() => setOpenNew(false)} presets={presetsQ.data.presets} />
+        <NewRequestDialog open={openNew} onClose={() => setOpenNew(false)} catalog={presetsQ.data} />
       )}
 
       <Modal

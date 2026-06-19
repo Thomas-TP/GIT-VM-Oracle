@@ -1,6 +1,6 @@
 import { AwsClient } from 'aws4fetch';
 
-const region = process.env.AWS_REGION || 'eu-west-3';
+const region = process.env.AWS_REGION || 'eu-central-2';
 const ec2c = new AwsClient({
   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
@@ -27,9 +27,14 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const KEY = 'vm-portal-e2e';
 let instanceId;
 try {
+  // resolve root device name (mirrors aws.ts)
+  const img = await ec2({ Action: 'DescribeImages', 'ImageId.1': AMI });
+  const rootDev = ex(img.text, 'rootDeviceName') ?? '/dev/sda1';
+  console.log('AMI', AMI, 'rootDevice', rootDev);
+
   await ec2({ Action: 'DeleteKeyPair', KeyName: KEY });
   const kp = await ec2({ Action: 'CreateKeyPair', KeyName: KEY, KeyType: 'ed25519' });
-  console.log('keypair:', kp.ok ? 'created, pem bytes=' + (ex(kp.text, 'keyMaterial')?.length ?? 0) : 'ERR ' + msg(kp.text));
+  console.log('keypair:', kp.ok ? 'ok' : 'ERR ' + msg(kp.text));
 
   const run = await ec2({
     Action: 'RunInstances',
@@ -42,9 +47,13 @@ try {
     'NetworkInterface.1.SubnetId': SUBNET,
     'NetworkInterface.1.AssociatePublicIpAddress': 'true',
     'NetworkInterface.1.SecurityGroupId.1': SG,
+    'BlockDeviceMapping.1.DeviceName': rootDev,
+    'BlockDeviceMapping.1.Ebs.VolumeSize': '20',
+    'BlockDeviceMapping.1.Ebs.VolumeType': 'gp3',
+    'BlockDeviceMapping.1.Ebs.DeleteOnTermination': 'true',
     'TagSpecification.1.ResourceType': 'instance',
-    'TagSpecification.1.Tag.1.Key': 'Name',
-    'TagSpecification.1.Tag.1.Value': 'vm-portal-e2e',
+    'TagSpecification.1.Tag.1.Key': 'managed-by',
+    'TagSpecification.1.Tag.1.Value': 'git-vm-portal',
   });
   instanceId = ex(run.text, 'instanceId');
   console.log('launch:', instanceId ? instanceId : 'ERR ' + msg(run.text));

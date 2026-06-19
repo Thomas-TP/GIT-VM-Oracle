@@ -1,6 +1,5 @@
 import { AwsClient } from 'aws4fetch';
 import type { Env } from './types';
-import { PRESETS } from './presets';
 
 // Minimal EC2 client. EC2 uses the AWS "query" protocol (form-encoded params,
 // XML responses). We extract only the few fields we need with regex — the
@@ -59,36 +58,48 @@ export interface LaunchResult {
   instanceId: string;
 }
 
-export async function launchInstance(
-  env: Env,
-  requestId: number,
-  preset: string,
-  keyName: string
-): Promise<LaunchResult> {
-  const p = PRESETS[preset];
-  if (!p) throw new Error(`unknown preset ${preset}`);
-  if (!env.AWS_AMI_ID || !env.AWS_SUBNET_ID || !env.AWS_SECURITY_GROUP_ID) {
-    throw new Error('AWS resource config missing (AMI / subnet / security group)');
+export interface LaunchParams {
+  requestId: number;
+  keyName: string;
+  instanceType: string;
+  amiId: string;
+  sizeGb: number;
+}
+
+// The root volume device name depends on the AMI (Ubuntu /dev/sda1, Debian /dev/xvda…).
+async function rootDeviceName(env: Env, amiId: string): Promise<string> {
+  const xml = await ec2(env, { Action: 'DescribeImages', 'ImageId.1': amiId });
+  return extract(xml, 'rootDeviceName') ?? '/dev/sda1';
+}
+
+export async function launchInstance(env: Env, p: LaunchParams): Promise<LaunchResult> {
+  if (!env.AWS_SUBNET_ID || !env.AWS_SECURITY_GROUP_ID) {
+    throw new Error('AWS network config missing (subnet / security group)');
   }
+  const rootDev = await rootDeviceName(env, p.amiId);
 
   const params: Record<string, string> = {
     Action: 'RunInstances',
-    ImageId: env.AWS_AMI_ID,
+    ImageId: p.amiId,
     InstanceType: p.instanceType,
     MinCount: '1',
     MaxCount: '1',
-    KeyName: keyName,
+    KeyName: p.keyName,
     'NetworkInterface.1.DeviceIndex': '0',
     'NetworkInterface.1.SubnetId': env.AWS_SUBNET_ID,
     'NetworkInterface.1.AssociatePublicIpAddress': 'true',
     'NetworkInterface.1.SecurityGroupId.1': env.AWS_SECURITY_GROUP_ID,
+    'BlockDeviceMapping.1.DeviceName': rootDev,
+    'BlockDeviceMapping.1.Ebs.VolumeSize': String(p.sizeGb),
+    'BlockDeviceMapping.1.Ebs.VolumeType': 'gp3',
+    'BlockDeviceMapping.1.Ebs.DeleteOnTermination': 'true',
     'TagSpecification.1.ResourceType': 'instance',
     'TagSpecification.1.Tag.1.Key': 'Name',
-    'TagSpecification.1.Tag.1.Value': `vm-portal-req-${requestId}`,
+    'TagSpecification.1.Tag.1.Value': `vm-portal-req-${p.requestId}`,
     'TagSpecification.1.Tag.2.Key': 'managed-by',
     'TagSpecification.1.Tag.2.Value': 'git-vm-portal',
     'TagSpecification.1.Tag.3.Key': 'request-id',
-    'TagSpecification.1.Tag.3.Value': String(requestId),
+    'TagSpecification.1.Tag.3.Value': String(p.requestId),
   };
 
   const xml = await ec2(env, params);
@@ -100,15 +111,43 @@ export async function launchInstance(
 export interface InstanceStatus {
   state: string;
   publicIp?: string;
+  launchTime?: string;
 }
 
 export async function describeInstance(env: Env, instanceId: string): Promise<InstanceStatus> {
   const xml = await ec2(env, { Action: 'DescribeInstances', 'InstanceId.1': instanceId });
   const state = xml.match(/<instanceState>[\s\S]*?<name>([^<]+)<\/name>/)?.[1] ?? 'unknown';
   const publicIp = extract(xml, 'ipAddress');
-  return { state, publicIp };
+  const launchTime = extract(xml, 'launchTime');
+  return { state, publicIp, launchTime };
 }
 
 export async function terminateInstance(env: Env, instanceId: string): Promise<void> {
   await ec2(env, { Action: 'TerminateInstances', 'InstanceId.1': instanceId });
+}
+
+export async function startInstance(env: Env, instanceId: string): Promise<void> {
+  await ec2(env, { Action: 'StartInstances', 'InstanceId.1': instanceId });
+}
+
+export async function stopInstance(env: Env, instanceId: string): Promise<void> {
+  await ec2(env, { Action: 'StopInstances', 'InstanceId.1': instanceId });
+}
+
+export async function rebootInstance(env: Env, instanceId: string): Promise<void> {
+  await ec2(env, { Action: 'RebootInstances', 'InstanceId.1': instanceId });
+}
+
+// List instances managed by the portal -> { instanceId: state } (for reconciliation).
+export async function listManagedInstances(env: Env): Promise<Record<string, string>> {
+  const xml = await ec2(env, {
+    Action: 'DescribeInstances',
+    'Filter.1.Name': 'tag:managed-by',
+    'Filter.1.Value.1': 'git-vm-portal',
+  });
+  const out: Record<string, string> = {};
+  const re = /<instanceId>([^<]+)<\/instanceId>[\s\S]*?<instanceState>[\s\S]*?<name>([^<]+)<\/name>/g;
+  let m;
+  while ((m = re.exec(xml))) out[m[1]] = m[2];
+  return out;
 }

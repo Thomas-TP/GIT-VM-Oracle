@@ -38,7 +38,9 @@ export interface VmRequestRow {
   id: number;
   user_email: string;
   purpose: string;
-  preset: string;
+  preset: string; // performance preset id (eco/std/perf/pro)
+  storage: string | null;
+  os: string | null;
   region: string;
   status: string;
   admin_note: string | null;
@@ -48,4 +50,5 @@ export interface VmRequestRow {
   // joined from vms (nullable)
   public_ip?: string | null;
   ssh_key_name?: string | null;
+  ssh_user?: string | null;
 }
