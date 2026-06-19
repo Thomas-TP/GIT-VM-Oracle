@@ -127,7 +127,7 @@ async function provisionRequest(env: Env, req: any): Promise<string> {
     encPassword = await encryptSecret(env.SESSION_SECRET, password);
   }
 
-  const kp = await createKeyPair(env, req.id);
+  const kp = await createKeyPair(env, req.id, isWindows ? 'rsa' : 'ed25519');
   const encKey = await encryptSecret(env.SESSION_SECRET, kp.privateKey);
   const { instanceId } = await launchInstance(env, {
     requestId: req.id,
