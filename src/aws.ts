@@ -40,11 +40,17 @@ export interface KeyPair {
 
 // Generate a fresh SSH key pair for one VM. AWS keeps the public half and
 // returns the private key once — we store it (encrypted) and hand it to the user.
-export async function createKeyPair(env: Env, requestId: number): Promise<KeyPair> {
+// Windows AMIs reject ed25519 key pairs (RunInstances fails) — they require RSA.
+// Linux keeps ed25519 (smaller, modern). The caller picks based on the OS.
+export async function createKeyPair(
+  env: Env,
+  requestId: number,
+  keyType: 'ed25519' | 'rsa' = 'ed25519'
+): Promise<KeyPair> {
   const keyName = `vm-portal-req-${requestId}`;
   // Delete any leftover with the same name (idempotent re-provision).
   await ec2(env, { Action: 'DeleteKeyPair', KeyName: keyName }).catch(() => {});
-  const xml = await ec2(env, { Action: 'CreateKeyPair', KeyName: keyName, KeyType: 'ed25519' });
+  const xml = await ec2(env, { Action: 'CreateKeyPair', KeyName: keyName, KeyType: keyType });
   const privateKey = extract(xml, 'keyMaterial');
   if (!privateKey) throw new Error('CreateKeyPair: no keyMaterial in response');
   return { keyName, privateKey };
