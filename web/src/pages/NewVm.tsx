@@ -134,12 +134,6 @@ function NewVmForm({
     }
   }, [minGb, storage, catalog.storage]);
 
-  const applyTemplate = (p: string, s: string, o: string) => {
-    setPerf(p);
-    setStorage(s);
-    setOs(o);
-  };
-
   const perfDef = catalog.perf.find((p) => p.id === perf);
   const storageDef = catalog.storage.find((s) => s.id === storage);
   const monthly = useMemo(() => {
@@ -190,12 +184,6 @@ function NewVmForm({
     },
   });
 
-  const templates = [
-    { name: t('newvm.tplDevName'), desc: t('newvm.tplDevDesc'), p: 'std', s: 's50', o: 'ubuntu2404' },
-    { name: t('newvm.tplDataName'), desc: t('newvm.tplDataDesc'), p: 'pro', s: 's100', o: 'ubuntu2404' },
-    { name: t('newvm.tplWinName'), desc: t('newvm.tplWinDesc'), p: 'perf', s: 's50', o: 'windows2022' },
-  ];
-
   return (
     <div className="space-y-7">
       <div>
@@ -205,25 +193,6 @@ function NewVmForm({
         <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{t('newvm.eyebrow')}</p>
         <h1 className="mt-1 text-2xl font-semibold tracking-tight">{t('newvm.title')}</h1>
         <p className="mt-1.5 text-sm text-muted-foreground">{t('newvm.subtitle')}</p>
-      </div>
-
-      {/* quick templates */}
-      <div>
-        <div className="mb-2 flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold tracking-tight">{t('newvm.templates')}</h2>
-          <span className="text-xs text-muted-foreground">{t('newvm.templatesHint')}</span>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          {templates.map((tpl) => {
-            const active = perf === tpl.p && storage === tpl.s && os === tpl.o;
-            return (
-              <Choice key={tpl.name} selected={active} onClick={() => applyTemplate(tpl.p, tpl.s, tpl.o)}>
-                <div className="font-medium">{tpl.name}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">{tpl.desc}</div>
-              </Choice>
-            );
-          })}
-        </div>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
