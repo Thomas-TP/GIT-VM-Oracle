@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../api';
+import { api, ApiError } from '../api';
+import { useToast } from '../toast';
 import type { PresetCatalog } from '../types';
 import { Button, Field, Modal, Select, Spinner, Textarea } from '../ui';
 
@@ -16,6 +17,7 @@ export function NewRequestDialog({
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const toast = useToast();
   const [perf, setPerf] = useState(catalog.perf[0]?.id ?? '');
   const [storage, setStorage] = useState(catalog.storage[1]?.id ?? catalog.storage[0]?.id ?? '');
   const [os, setOs] = useState(catalog.os[0]?.id ?? '');
@@ -35,6 +37,10 @@ export function NewRequestDialog({
       qc.invalidateQueries({ queryKey: ['requests'] });
       setPurpose('');
       onClose();
+      toast.success(t('toast.requestCreated'));
+    },
+    onError: (e) => {
+      toast.error(e instanceof ApiError && e.message === 'rate_limited' ? t('toast.rateLimited') : t('toast.error'));
     },
   });
 

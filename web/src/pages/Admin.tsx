@@ -2,10 +2,13 @@ import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
+import { useToast } from '../toast';
 import type { PerfPreset, Status, VmRequest } from '../types';
-import { Button, Card, Field, IconDownload, Modal, Select, Spinner, Textarea } from '../ui';
+import { Button, Card, Field, IconDownload, Modal, Select, Spinner, TableSkeleton, Textarea } from '../ui';
 import { RequestsTable } from '../components/RequestsTable';
 import { UsersPanel } from '../components/UsersPanel';
+
+const PER_PAGE = 10;
 
 function StatCard({ label, value, dot }: { label: string; value: number; dot: string }) {
   return (
@@ -18,7 +21,6 @@ function StatCard({ label, value, dot }: { label: string; value: number; dot: st
     </Card>
   );
 }
-
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <Card className="p-4">
@@ -27,7 +29,6 @@ function MetricCard({ label, value }: { label: string; value: string }) {
     </Card>
   );
 }
-
 function fmtSeconds(s: number): string {
   if (!s) return '—';
   if (s < 60) return `${s}s`;
@@ -37,7 +38,11 @@ function fmtSeconds(s: number): string {
 export function Admin() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const toast = useToast();
   const [filter, setFilter] = useState<Status | ''>('');
+  const [search, setSearch] = useState('');
+  const [sortAsc, setSortAsc] = useState(false);
+  const [page, setPage] = useState(0);
   const [actingId, setActingId] = useState<number | null>(null);
   const [rejectTarget, setRejectTarget] = useState<VmRequest | null>(null);
   const [termTarget, setTermTarget] = useState<VmRequest | null>(null);
@@ -61,22 +66,50 @@ export function Admin() {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['admin-requests'] });
     qc.invalidateQueries({ queryKey: ['admin-stats'] });
+    qc.invalidateQueries({ queryKey: ['admin-metrics'] });
   };
-  const done = () => {
+  const reset = () => {
     setActingId(null);
     setRejectTarget(null);
     setTermTarget(null);
     setNote('');
     invalidate();
   };
+  const onErr = () => {
+    setActingId(null);
+    toast.error(t('toast.error'));
+  };
 
-  const approveM = useMutation({ mutationFn: (id: number) => api.approve(id), onSuccess: done, onError: () => setActingId(null) });
-  const rejectM = useMutation({ mutationFn: (v: { id: number; note: string }) => api.reject(v.id, v.note), onSuccess: done, onError: () => setActingId(null) });
-  const termM = useMutation({ mutationFn: (id: number) => api.terminate(id), onSuccess: done, onError: () => setActingId(null) });
+  const approveM = useMutation({
+    mutationFn: (id: number) => api.approve(id),
+    onSuccess: () => { reset(); toast.success(t('toast.approved')); },
+    onError: onErr,
+  });
+  const rejectM = useMutation({
+    mutationFn: (v: { id: number; note: string }) => api.reject(v.id, v.note),
+    onSuccess: () => { reset(); toast.success(t('toast.rejected')); },
+    onError: onErr,
+  });
+  const termM = useMutation({
+    mutationFn: (id: number) => api.terminate(id),
+    onSuccess: () => { reset(); toast.success(t('toast.terminated')); },
+    onError: onErr,
+  });
 
-  const rows = listQ.data ?? [];
   const stats = statsQ.data ?? {};
   const m = metricsQ.data;
+
+  const rows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    let r = listQ.data ?? [];
+    if (q) r = r.filter((x) => x.user_email.toLowerCase().includes(q) || x.purpose.toLowerCase().includes(q));
+    r = [...r].sort((a, b) => (sortAsc ? a.created_at.localeCompare(b.created_at) : b.created_at.localeCompare(a.created_at)));
+    return r;
+  }, [listQ.data, search, sortAsc]);
+
+  const pageCount = Math.max(1, Math.ceil(rows.length / PER_PAGE));
+  const safePage = Math.min(page, pageCount - 1);
+  const display = rows.slice(safePage * PER_PAGE, safePage * PER_PAGE + PER_PAGE);
 
   return (
     <div className="space-y-8">
@@ -92,16 +125,21 @@ export function Admin() {
         <StatCard label={t('status.active')} value={stats.active ?? 0} dot="bg-emerald-500" />
         <StatCard label={t('status.failed')} value={stats.failed ?? 0} dot="bg-red-500" />
       </div>
-
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <MetricCard label={t('metric.successRate')} value={`${Math.round((m?.successRate ?? 1) * 100)}%`} />
         <MetricCard label={t('metric.avgProvision')} value={fmtSeconds(m?.avgProvisionSeconds ?? 0)} />
         <MetricCard label={t('metric.total')} value={String(m?.total ?? 0)} />
       </div>
 
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="text-lg font-semibold tracking-tight">{t('admin.all')}</h2>
-        <div className="flex items-end gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+            placeholder={t('admin.search')}
+            className="h-9 w-48 rounded-lg border border-border bg-background px-3 text-sm outline-none transition placeholder:text-muted-foreground/70 focus:border-ring focus:ring-2 focus:ring-ring/15"
+          />
           <a
             href={api.csvUrl}
             download
@@ -109,40 +147,41 @@ export function Admin() {
           >
             <IconDownload className="h-4 w-4" /> {t('admin.exportCsv')}
           </a>
-          <div className="w-52">
-            <Field label={t('admin.filter')}>
-              <Select value={filter} onChange={(e) => setFilter(e.target.value as Status | '')}>
-                <option value="">{t('admin.allStatuses')}</option>
-                {(['pending', 'provisioning', 'active', 'approved', 'rejected', 'failed', 'terminated'] as Status[]).map(
-                  (s) => (
-                    <option key={s} value={s}>
-                      {t(`status.${s}`)}
-                    </option>
-                  )
-                )}
-              </Select>
-            </Field>
-          </div>
+          <Select value={filter} onChange={(e) => { setFilter(e.target.value as Status | ''); setPage(0); }} className="w-44">
+            <option value="">{t('admin.allStatuses')}</option>
+            {(['pending', 'provisioning', 'active', 'approved', 'rejected', 'failed', 'terminated'] as Status[]).map((s) => (
+              <option key={s} value={s}>{t(`status.${s}`)}</option>
+            ))}
+          </Select>
+          <Button variant="secondary" onClick={() => setSortAsc((v) => !v)}>
+            {sortAsc ? t('admin.oldest') : t('admin.newest')}
+          </Button>
         </div>
       </div>
 
       {listQ.isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner /> {t('common.loading')}
-        </div>
+        <TableSkeleton rows={6} />
       ) : (
-        <RequestsTable
-          rows={rows}
-          presets={presetMap}
-          admin
-          busyId={actingId}
-          onApprove={(id) => {
-            setActingId(id);
-            approveM.mutate(id);
-          }}
-          onReject={(r) => setRejectTarget(r)}
-          onTerminate={(r) => setTermTarget(r)}
-        />
+        <>
+          <RequestsTable
+            rows={display}
+            presets={presetMap}
+            admin
+            busyId={actingId}
+            onApprove={(id) => { setActingId(id); approveM.mutate(id); }}
+            onReject={(r) => setRejectTarget(r)}
+            onTerminate={(r) => setTermTarget(r)}
+          />
+          {pageCount > 1 && (
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>{safePage + 1} / {pageCount}</span>
+              <div className="flex gap-2">
+                <Button variant="secondary" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>←</Button>
+                <Button variant="secondary" disabled={safePage >= pageCount - 1} onClick={() => setPage(safePage + 1)}>→</Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       <div className="pt-2">
@@ -162,11 +201,7 @@ export function Admin() {
             <Button
               variant="danger"
               disabled={rejectM.isPending}
-              onClick={() => {
-                if (!rejectTarget) return;
-                setActingId(rejectTarget.id);
-                rejectM.mutate({ id: rejectTarget.id, note });
-              }}
+              onClick={() => { if (!rejectTarget) return; setActingId(rejectTarget.id); rejectM.mutate({ id: rejectTarget.id, note }); }}
             >
               {rejectM.isPending ? <Spinner className="h-4 w-4" /> : null}
               {t('actions.reject')}
@@ -192,11 +227,7 @@ export function Admin() {
             <Button
               variant="danger"
               disabled={termM.isPending}
-              onClick={() => {
-                if (!termTarget) return;
-                setActingId(termTarget.id);
-                termM.mutate(termTarget.id);
-              }}
+              onClick={() => { if (!termTarget) return; setActingId(termTarget.id); termM.mutate(termTarget.id); }}
             >
               {termM.isPending ? <Spinner className="h-4 w-4" /> : null}
               {t('actions.terminate')}

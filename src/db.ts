@@ -90,6 +90,16 @@ export async function createRequest(
   return res.meta.last_row_id as number;
 }
 
+// Rate limiting: how many requests this user created in the last N minutes.
+export async function countRecentRequests(env: Env, email: string, minutes: number): Promise<number> {
+  const res = await env.DB.prepare(
+    `SELECT COUNT(*) AS n FROM vm_requests WHERE user_email = ?1 AND created_at >= datetime('now', ?2)`
+  )
+    .bind(email, `-${minutes} minutes`)
+    .first<{ n: number }>();
+  return res?.n ?? 0;
+}
+
 export async function listRequestsForUser(env: Env, email: string): Promise<VmRequestRow[]> {
   const res = await env.DB.prepare(
     `SELECT r.*, v.public_ip AS public_ip, v.ssh_key_name AS ssh_key_name

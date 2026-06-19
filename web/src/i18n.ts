@@ -110,6 +110,9 @@ const fr = {
     stats: 'Vue d’ensemble',
     users: 'Utilisateurs',
     exportCsv: 'Exporter CSV',
+    search: 'Rechercher…',
+    newest: 'Plus récentes',
+    oldest: 'Plus anciennes',
   },
   metric: {
     total: 'Demandes totales',
@@ -142,6 +145,13 @@ const fr = {
     approved: 'Demande approuvée — VM en création',
     rejected: 'Demande refusée',
     terminated: 'VM supprimée',
+    error: 'Une erreur est survenue',
+    rateLimited: 'Trop de demandes — réessaie plus tard',
+    started: 'VM démarrée',
+    stopped: 'VM arrêtée',
+    rebooted: 'VM redémarrée',
+    roleUpdated: 'Rôle mis à jour',
+    commentAdded: 'Commentaire ajouté',
   },
 };
 
@@ -254,6 +264,9 @@ const en: typeof fr = {
     stats: 'Overview',
     users: 'Users',
     exportCsv: 'Export CSV',
+    search: 'Search…',
+    newest: 'Newest',
+    oldest: 'Oldest',
   },
   metric: {
     total: 'Total requests',
@@ -286,6 +299,13 @@ const en: typeof fr = {
     approved: 'Request approved — VM provisioning',
     rejected: 'Request rejected',
     terminated: 'VM deleted',
+    error: 'Something went wrong',
+    rateLimited: 'Too many requests — try again later',
+    started: 'VM started',
+    stopped: 'VM stopped',
+    rebooted: 'VM rebooted',
+    roleUpdated: 'Role updated',
+    commentAdded: 'Comment added',
   },
 };
 

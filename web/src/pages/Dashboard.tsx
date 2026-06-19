@@ -3,13 +3,15 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import type { PerfPreset, VmRequest } from '../types';
-import { Button, IconPlus, IconServer, Modal, Spinner } from '../ui';
+import { Button, IconPlus, IconServer, Modal, Spinner, TableSkeleton } from '../ui';
+import { useToast } from '../toast';
 import { RequestsTable } from '../components/RequestsTable';
 import { NewRequestDialog } from '../components/NewRequestDialog';
 
 export function Dashboard() {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const toast = useToast();
   const [openNew, setOpenNew] = useState(false);
   const [termTarget, setTermTarget] = useState<VmRequest | null>(null);
 
@@ -32,7 +34,9 @@ export function Dashboard() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['requests'] });
       setTermTarget(null);
+      toast.success(t('toast.terminated'));
     },
+    onError: () => toast.error(t('toast.error')),
   });
 
   const rows = reqQ.data ?? [];
@@ -56,9 +60,7 @@ export function Dashboard() {
       </div>
 
       {reqQ.isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner /> {t('common.loading')}
-        </div>
+        <TableSkeleton rows={4} />
       ) : rows.length === 0 ? (
         <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border bg-card/50 p-16 text-center">
           <div className="grid h-12 w-12 place-items-center rounded-xl border border-border bg-muted text-muted-foreground">

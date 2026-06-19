@@ -53,6 +53,28 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={`${ctrl} resize-y py-2 leading-relaxed ${props.className ?? ''}`} />;
 }
 
+export function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`animate-pulse rounded-md bg-muted ${className}`} />;
+}
+
+export function TableSkeleton({ rows = 4 }: { rows?: number }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="space-y-px">
+        {Array.from({ length: rows }).map((_, i) => (
+          <div key={i} className="flex items-center gap-4 px-4 py-3.5">
+            <Skeleton className="h-4 w-10" />
+            <Skeleton className="h-4 w-28" />
+            <Skeleton className="h-4 flex-1" />
+            <Skeleton className="h-5 w-20 rounded-full" />
+            <Skeleton className="h-7 w-16" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export function Spinner({ className = '' }: { className?: string }) {
   return (
     <svg className={`animate-spin ${className}`} width="16" height="16" viewBox="0 0 24 24" fill="none">

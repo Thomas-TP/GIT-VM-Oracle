@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
+import { useToast } from '../toast';
 import { fmtDate } from '../lib/format';
 import { Button, Card, Spinner, Textarea } from '../ui';
 
 export function Comments({ requestId }: { requestId: number }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const toast = useToast();
   const [body, setBody] = useState('');
 
   const q = useQuery({ queryKey: ['comments', requestId], queryFn: () => api.comments(requestId) });
@@ -16,7 +18,9 @@ export function Comments({ requestId }: { requestId: number }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['comments', requestId] });
       setBody('');
+      toast.success(t('toast.commentAdded'));
     },
+    onError: () => toast.error(t('toast.error')),
   });
 
   const comments = q.data ?? [];

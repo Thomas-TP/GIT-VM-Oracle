@@ -19,6 +19,7 @@ import {
 } from '../ui';
 import { StatusBadge } from '../components/StatusBadge';
 import { Comments } from '../components/Comments';
+import { useToast } from '../toast';
 
 function Row({ label, children, mono }: { label: string; children: React.ReactNode; mono?: boolean }) {
   return (
@@ -58,6 +59,7 @@ export function RequestDetail() {
   const { id } = useParams();
   const rid = Number(id);
   const qc = useQueryClient();
+  const toast = useToast();
   const [confirmTerm, setConfirmTerm] = useState(false);
 
   const q = useQuery({
@@ -78,10 +80,15 @@ export function RequestDetail() {
     qc.invalidateQueries({ queryKey: ['live', rid] });
     qc.invalidateQueries({ queryKey: ['requests'] });
   };
-  const termM = useMutation({ mutationFn: () => api.terminate(rid), onSuccess: () => { refresh(); setConfirmTerm(false); } });
-  const startM = useMutation({ mutationFn: () => api.start(rid), onSuccess: refresh });
-  const stopM = useMutation({ mutationFn: () => api.stop(rid), onSuccess: refresh });
-  const rebootM = useMutation({ mutationFn: () => api.reboot(rid), onSuccess: refresh });
+  const onErr = () => toast.error(t('toast.error'));
+  const termM = useMutation({
+    mutationFn: () => api.terminate(rid),
+    onSuccess: () => { refresh(); setConfirmTerm(false); toast.success(t('toast.terminated')); },
+    onError: onErr,
+  });
+  const startM = useMutation({ mutationFn: () => api.start(rid), onSuccess: () => { refresh(); toast.success(t('toast.started')); }, onError: onErr });
+  const stopM = useMutation({ mutationFn: () => api.stop(rid), onSuccess: () => { refresh(); toast.success(t('toast.stopped')); }, onError: onErr });
+  const rebootM = useMutation({ mutationFn: () => api.reboot(rid), onSuccess: () => { refresh(); toast.success(t('toast.rebooted')); }, onError: onErr });
   const busy = startM.isPending || stopM.isPending || rebootM.isPending;
 
   if (q.isLoading)

@@ -17,6 +17,7 @@ import {
   upsertUser,
   audit,
   createRequest,
+  countRecentRequests,
   listRequestsForUser,
   listRequestsByStatus,
   getRequest,
@@ -149,6 +150,10 @@ app.post('/api/requests', apiAuth, async (c) => {
   const purpose = String(body.purpose ?? '').trim();
   if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !purpose) {
     return c.json({ error: 'invalid_request' }, 400);
+  }
+  // Rate limit: max 5 requests per hour per user.
+  if ((await countRecentRequests(c.env, user.email, 60)) >= 5) {
+    return c.json({ error: 'rate_limited' }, 429);
   }
   const id = await createRequest(c.env, user.email, purpose, perf, storage, os, c.env.AWS_REGION);
   await audit(c.env, user.email, 'request.create', `req:${id}`, `${perf}/${storage}/${os}`);
