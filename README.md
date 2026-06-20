@@ -11,9 +11,6 @@ Le tout sur **Cloudflare Workers**.
 
 </div>
 
-> Hackathon **Satom IT & Learning Solutions × Geneva Institute of Technology (GIT)** — juin 2026.
-> Binôme : Thomas P. & Abderahmane.
-
 ---
 
 ## ✨ Fonctionnalités

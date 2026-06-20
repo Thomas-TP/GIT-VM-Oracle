@@ -21,7 +21,6 @@ automatiquement sur AWS EC2** (clé SSH unique chiffrée, ou mot de passe RDP po
 
 - **Prod** : <https://git-vm-portal.thomas-prudhomme.workers.dev>
 - **Repo** : <https://github.com/Thomas-TP/GIT-VM>
-- **Contexte** : hackathon Satom IT & Learning Solutions × Geneva Institute of Technology (GIT).
 
 ## 2. Règles d'or (NE PAS enfreindre)
 
@@ -191,6 +190,6 @@ Détail de chaque variable, permissions IAM AWS requises, enregistrement de l'ap
 | Variables, secrets, IAM, Entra, rotation | [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md) |
 | Contribuer (workflow, conventions) | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Décisions techniques | [`docs/adr/`](docs/adr/) |
-| État vs cahier des charges, gaps | [`docs/analyse/`](docs/analyse/) |
+| État des lieux, dette technique | [`docs/analyse/`](docs/analyse/) |
 | Plan, backlog | [`docs/roadmap/`](docs/roadmap/) |
 | Faits durables (mémoire) | [`.claude/MEMOIRE-PROJET.md`](.claude/MEMOIRE-PROJET.md) |

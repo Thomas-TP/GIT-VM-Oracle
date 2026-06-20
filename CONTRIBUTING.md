@@ -59,7 +59,7 @@ corps si non évident. Exemple : `feat(web): page de création de VM en cartes`.
 
 ## Décisions d'architecture (ADR)
 
-Toute décision structurante = un **ADR** dans [`docs/adr/`](docs/adr/) (livrable noté). Copie le
+Toute décision structurante = un **ADR** dans [`docs/adr/`](docs/adr/). Copie le
 format d'un ADR existant : Contexte → Décision → Justification → Conséquences → Alternatives écartées.
 
 ## Garde-fous projet
@@ -67,4 +67,4 @@ format d'un ADR existant : Contexte → Décision → Justification → Conséqu
 - **Ne casse pas l'existant** : on ajoute/corrige, on ne réécrit pas, on ne pivote pas.
 - **Cycle de vie** : toute automatisation passe par le **réconciliateur** cron (`src/index.ts`).
 - **Docs en français**, identifiants/code en anglais.
-- Garde un **plan B de démo** vivant (vidéo + environnement de secours).
+- Migrations **additives uniquement** (jamais de reconstruction de table sur D1 remote).
