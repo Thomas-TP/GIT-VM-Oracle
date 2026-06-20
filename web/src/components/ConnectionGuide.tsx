@@ -5,6 +5,16 @@ import { Button, IconCopy, IconDownload, Spinner } from '../ui';
 
 type Connect = 'ssh' | 'rdp';
 
+function downloadText(filename: string, content: string, type = 'text/plain') {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 function Copyable({ value }: { value: string }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
@@ -145,6 +155,19 @@ export function ConnectionGuide({
           <p className="mt-1.5 text-xs text-muted-foreground">{t('guide.pwHint')}</p>
         </div>
 
+        <Button
+          variant="secondary"
+          onClick={() =>
+            downloadText(
+              `gitvm-${id}.rdp`,
+              `full address:s:${ip}:3389\nusername:s:${user}\nscreen mode id:i:2\nprompt for credentials:i:1\n`,
+              'application/x-rdp'
+            )
+          }
+        >
+          <IconDownload className="h-4 w-4" /> {t('guide.dlRdp')}
+        </Button>
+
         <Tabs
           active={tab}
           onSelect={setTab}
@@ -180,11 +203,24 @@ export function ConnectionGuide({
         <Info label={t('guide.keyName')} value={keyFile} mono />
       </div>
 
-      <a href={api.keyUrl(id)} className="inline-flex">
-        <Button variant="secondary">
-          <IconDownload className="h-4 w-4" /> {t('access.downloadKey')}
+      <div className="flex flex-wrap gap-2">
+        <a href={api.keyUrl(id)} className="inline-flex">
+          <Button variant="secondary">
+            <IconDownload className="h-4 w-4" /> {t('access.downloadKey')}
+          </Button>
+        </a>
+        <Button
+          variant="secondary"
+          onClick={() =>
+            downloadText(
+              `gitvm-${id}.sshconfig`,
+              `Host gitvm-${id}\n    HostName ${ip}\n    User ${user}\n    IdentityFile ~/.ssh/${keyFile}\n    StrictHostKeyChecking accept-new\n`
+            )
+          }
+        >
+          <IconDownload className="h-4 w-4" /> {t('guide.dlSshConfig')}
         </Button>
-      </a>
+      </div>
 
       <Tabs
         active={tab}
