@@ -42,6 +42,40 @@ export async function addComment(env: Env, requestId: number, author: string, bo
     .run();
 }
 
+// ---- In-app notifications ----------------------------------------------
+export async function addNotification(env: Env, userEmail: string, type: string, link: string | null = null) {
+  await env.DB.prepare(`INSERT INTO notifications (user_email, type, link) VALUES (?1, ?2, ?3)`)
+    .bind(userEmail, type, link)
+    .run();
+}
+
+// In-app notification for every configured admin.
+export async function notifyAdminsInApp(env: Env, type: string, link: string | null = null) {
+  const admins = env.ADMIN_EMAILS.split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+  for (const a of admins) await addNotification(env, a, type, link);
+}
+
+export async function listNotifications(env: Env, userEmail: string, limit = 30) {
+  const res = await env.DB.prepare(
+    `SELECT id, type, link, read, created_at FROM notifications
+      WHERE user_email = ?1 ORDER BY created_at DESC, id DESC LIMIT ?2`
+  )
+    .bind(userEmail, limit)
+    .all();
+  return res.results ?? [];
+}
+
+export async function countUnreadNotifications(env: Env, userEmail: string): Promise<number> {
+  const res = await env.DB.prepare(`SELECT COUNT(*) AS n FROM notifications WHERE user_email = ?1 AND read = 0`)
+    .bind(userEmail)
+    .first<{ n: number }>();
+  return res?.n ?? 0;
+}
+
+export async function markNotificationsRead(env: Env, userEmail: string) {
+  await env.DB.prepare(`UPDATE notifications SET read = 1 WHERE user_email = ?1 AND read = 0`).bind(userEmail).run();
+}
+
 export async function listComments(env: Env, requestId: number) {
   const res = await env.DB.prepare(
     `SELECT id, author, body, created_at FROM request_comments WHERE request_id = ?1 ORDER BY created_at`

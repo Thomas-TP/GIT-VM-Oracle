@@ -1,4 +1,4 @@
-import type { PresetCatalog, User, VmRequest, Status, AdminUser, Comment, Metrics, AuditEntry } from './types';
+import type { PresetCatalog, User, VmRequest, Status, AdminUser, Comment, Metrics, AuditEntry, Notification } from './types';
 
 class ApiError extends Error {
   constructor(public status: number, message: string) {
@@ -83,6 +83,9 @@ export const api = {
   comments: (id: number) => req<{ comments: Comment[] }>(`/api/requests/${id}/comments`).then((r) => r.comments),
   addComment: (id: number, body: string) =>
     req<{ ok: true }>(`/api/requests/${id}/comments`, { method: 'POST', body: JSON.stringify({ body }) }),
+
+  notifications: () => req<{ notifications: Notification[]; unread: number }>('/api/notifications'),
+  markNotificationsRead: () => req<{ ok: true }>('/api/notifications/read', { method: 'POST' }),
 
   logout: () => req<void>('/auth/logout', { method: 'POST' }),
 };

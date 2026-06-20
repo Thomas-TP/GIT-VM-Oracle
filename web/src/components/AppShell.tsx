@@ -6,6 +6,7 @@ import { api } from '../api';
 import type { User } from '../types';
 import { IconLogout, Logo } from '../ui';
 import { LangToggle, ThemeToggle } from './Toggles';
+import { NotificationBell } from './NotificationBell';
 
 function navCls({ isActive }: { isActive: boolean }) {
   return `rounded-lg px-3 py-1.5 text-sm font-medium transition ${
@@ -63,6 +64,7 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
           </nav>
 
           <div className="ml-auto flex items-center gap-2">
+            <NotificationBell />
             <LangToggle />
             <ThemeToggle />
             <div className="mx-1 hidden h-5 w-px bg-border md:block" />

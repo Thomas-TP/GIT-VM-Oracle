@@ -44,6 +44,11 @@ import {
   setUserRole,
   addComment,
   listComments,
+  addNotification,
+  notifyAdminsInApp,
+  listNotifications,
+  countUnreadNotifications,
+  markNotificationsRead,
   listAudit,
   metrics,
 } from './db';
@@ -211,6 +216,19 @@ app.get('/api/me', async (c) => {
   return c.json({ user });
 });
 
+app.get('/api/notifications', apiAuth, async (c) => {
+  const u = c.get('user');
+  return c.json({
+    notifications: await listNotifications(c.env, u.email),
+    unread: await countUnreadNotifications(c.env, u.email),
+  });
+});
+
+app.post('/api/notifications/read', apiAuth, async (c) => {
+  await markNotificationsRead(c.env, c.get('user').email);
+  return c.json({ ok: true });
+});
+
 app.get('/api/presets', (c) =>
   c.json({
     perf: Object.values(PERF),
@@ -261,6 +279,7 @@ app.post('/api/requests', apiAuth, async (c) => {
     start ? start.toISOString() : null, end.toISOString()
   );
   await audit(c.env, user.email, 'request.create', `req:${id}`, `${perf}/${storage}/${os} end:${end.toISOString()}`);
+  await notifyAdminsInApp(c.env, 'request_new', `/requests/${id}`);
   c.executionCtx.waitUntil(notifyAdminsNewRequest(c.env, id, user.email, PERF[perf].label));
   return c.json({ id }, 201);
 });
@@ -398,6 +417,7 @@ app.post('/api/requests/:id/extend', apiAuth, async (c) => {
   if (currentEnd && until.getTime() <= currentEnd.getTime()) return c.json({ error: 'must_be_later' }, 400);
   await requestExtension(c.env, id, until.toISOString());
   await audit(c.env, user.email, 'extension.request', `req:${id}`, until.toISOString());
+  await notifyAdminsInApp(c.env, 'ext_request', `/requests/${id}`);
   c.executionCtx.waitUntil(notifyAdminsExtension(c.env, id, r.user_email, until.toISOString()));
   return c.json({ ok: true });
 });
@@ -541,6 +561,7 @@ app.post('/api/admin/requests/:id/approve', apiAdmin, async (c) => {
   try {
     const instanceId = await provisionRequest(c.env, req);
     await audit(c.env, admin.email, 'vm.launch', `req:${id}`, instanceId);
+    await addNotification(c.env, req.user_email, 'approved', `/requests/${id}`);
     c.executionCtx.waitUntil(notifyUserApproved(c.env, req.user_email, id));
     return c.json({ ok: true, status: 'provisioning' });
   } catch (e: any) {
@@ -557,7 +578,10 @@ app.post('/api/admin/requests/:id/extend/approve', apiAdmin, async (c) => {
   if (!until) return c.json({ error: 'no_request' }, 409);
   await audit(c.env, admin.email, 'extension.approve', `req:${id}`, until);
   const r = await getRequest(c.env, id);
-  if (r) c.executionCtx.waitUntil(notifyUserExtensionApproved(c.env, r.user_email, id, until));
+  if (r) {
+    await addNotification(c.env, r.user_email, 'ext_approved', `/requests/${id}`);
+    c.executionCtx.waitUntil(notifyUserExtensionApproved(c.env, r.user_email, id, until));
+  }
   return c.json({ ok: true });
 });
 
@@ -568,6 +592,7 @@ app.post('/api/admin/requests/:id/extend/reject', apiAdmin, async (c) => {
   if (!r || !r.ext_requested_end) return c.json({ error: 'no_request' }, 409);
   await rejectExtension(c.env, id);
   await audit(c.env, admin.email, 'extension.reject', `req:${id}`);
+  await addNotification(c.env, r.user_email, 'ext_rejected', `/requests/${id}`);
   c.executionCtx.waitUntil(notifyUserExtensionRejected(c.env, r.user_email, id));
   return c.json({ ok: true });
 });
@@ -581,6 +606,7 @@ app.post('/api/admin/requests/:id/reject', apiAdmin, async (c) => {
   if (!req || req.status !== 'pending') return c.json({ error: 'not_pending' }, 409);
   await setRequestStatus(c.env, id, 'rejected', admin.email, note);
   await audit(c.env, admin.email, 'request.reject', `req:${id}`, note);
+  await addNotification(c.env, req.user_email, 'rejected', `/requests/${id}`);
   c.executionCtx.waitUntil(notifyUserRejected(c.env, req.user_email, id, note));
   return c.json({ ok: true });
 });
@@ -619,6 +645,7 @@ async function reconcile(env: Env): Promise<void> {
           await updateVm(env, row.id, 'running', s.publicIp);
           await setRequestStatus(env, row.id, 'active');
           await audit(env, 'system', 'vm.active', `req:${row.id}`, s.publicIp);
+          await addNotification(env, row.user_email, 'ready', `/requests/${row.id}`);
           await notifyUserReady(env, row.user_email, row.id, s.publicIp, row.ssh_user ?? 'ubuntu', row.connect_method === 'rdp' ? 'rdp' : 'ssh');
         } else {
           await updateVm(env, row.id, s.state);
@@ -732,6 +759,7 @@ async function enforceExpiry(env: Env): Promise<void> {
       await markExpired(env, row.id);
       await setRequestStatus(env, row.id, 'terminated');
       await audit(env, 'system', 'vm.expired.terminated', `req:${row.id}`, row.aws_instance_id ?? '');
+      await addNotification(env, row.user_email, 'expired', `/requests/${row.id}`);
       await notifyUserExpired(env, row.user_email, row.id);
     } catch (e: any) {
       await audit(env, 'system', 'vm.expire.error', `req:${row.id}`, e.message);
@@ -740,6 +768,7 @@ async function enforceExpiry(env: Env): Promise<void> {
   for (const row of await listExpiringSoon(env)) {
     if ((await countAudit(env, `req:${row.id}`, 'vm.expiring.notified')) > 0) continue;
     try {
+      await addNotification(env, row.user_email, 'expiring', `/requests/${row.id}`);
       await notifyUserExpiring(env, row.user_email, row.id, row.end_date);
       await audit(env, 'system', 'vm.expiring.notified', `req:${row.id}`);
     } catch (e: any) {

@@ -84,6 +84,13 @@ export interface AuditEntry {
   detail: string | null;
   created_at: string;
 }
+export interface Notification {
+  id: number;
+  type: string;
+  link: string | null;
+  read: number;
+  created_at: string;
+}
 
 export interface VmRequest {
   id: number;
