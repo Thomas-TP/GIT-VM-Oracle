@@ -33,6 +33,7 @@ import {
   listActiveVms,
   listScheduledVms,
   setSchedule,
+  setSchedulePaused,
   listExpired,
   listExpiringSoon,
   markExpired,
@@ -323,6 +324,8 @@ app.post('/api/requests/:id/start', apiAuth, async (c) => {
   try {
     await startInstance(c.env, ctx.vm.aws_instance_id);
     await updateVm(c.env, id, 'pending');
+    // Manual start resumes the schedule.
+    if (ctx.r.schedule_enabled) await setSchedulePaused(c.env, id, false);
     await audit(c.env, c.get('user').email, 'vm.start', `req:${id}`);
     return c.json({ ok: true });
   } catch (e: any) {
@@ -338,6 +341,8 @@ app.post('/api/requests/:id/stop', apiAuth, async (c) => {
   try {
     await stopInstance(c.env, ctx.vm.aws_instance_id);
     await updateVm(c.env, id, 'stopping');
+    // Manual stop pauses the schedule so it doesn't auto-restart the VM.
+    if (ctx.r.schedule_enabled) await setSchedulePaused(c.env, id, true);
     await audit(c.env, c.get('user').email, 'vm.stop', `req:${id}`);
     return c.json({ ok: true });
   } catch (e: any) {
@@ -404,6 +409,19 @@ app.post('/api/requests/:id/schedule', apiAuth, async (c) => {
     await setSchedule(c.env, id, false, null, null, null);
     await audit(c.env, user.email, 'schedule.off', `req:${id}`);
   }
+  return c.json({ ok: true });
+});
+
+// Resume a paused schedule (clears the manual-stop pause). The reconciler will
+// then start the VM at the next start boundary.
+app.post('/api/requests/:id/schedule/resume', apiAuth, async (c) => {
+  const user = c.get('user');
+  const id = Number(c.req.param('id'));
+  const r = await getRequest(c.env, id);
+  if (!r) return c.json({ error: 'not_found' }, 404);
+  if (r.user_email !== user.email && user.role !== 'admin') return c.json({ error: 'forbidden' }, 403);
+  await setSchedulePaused(c.env, id, false);
+  await audit(c.env, user.email, 'schedule.resume', `req:${id}`);
   return c.json({ ok: true });
 });
 

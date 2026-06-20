@@ -59,6 +59,7 @@ export const api = {
     id: number,
     payload: { enabled: boolean; start?: string; stop?: string; days?: number[] }
   ) => req<{ ok: true }>(`/api/requests/${id}/schedule`, { method: 'POST', body: JSON.stringify(payload) }),
+  resumeSchedule: (id: number) => req<{ ok: true }>(`/api/requests/${id}/schedule/resume`, { method: 'POST' }),
 
   adminList: (status?: Status | '') =>
     req<{ requests: VmRequest[] }>(`/api/admin/requests${status ? `?status=${status}` : ''}`).then(

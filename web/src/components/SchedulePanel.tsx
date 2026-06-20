@@ -62,9 +62,23 @@ export function SchedulePanel({ request }: { request: VmRequest }) {
     },
     onError: () => toast.error(t('toast.error')),
   });
+  const resumeM = useMutation({
+    mutationFn: () => api.resumeSchedule(request.id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['request', request.id] }); toast.success(t('schedule.resumed')); },
+    onError: () => toast.error(t('toast.error')),
+  });
 
   return (
     <div className="space-y-4">
+      {request.schedule_enabled && request.schedule_paused ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+          <span className="text-sm text-amber-700 dark:text-amber-400">{t('schedule.paused')}</span>
+          <Button variant="secondary" disabled={resumeM.isPending} onClick={() => resumeM.mutate()}>
+            {resumeM.isPending ? <Spinner className="h-4 w-4" /> : null}
+            {t('schedule.resume')}
+          </Button>
+        </div>
+      ) : null}
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm text-muted-foreground">{t('schedule.hint')}</p>
         <Switch on={enabled} onClick={() => setEnabled((v) => !v)} />

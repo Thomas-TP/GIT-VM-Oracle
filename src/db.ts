@@ -319,13 +319,14 @@ export interface ScheduledVm {
 }
 
 // Active VMs with an enabled auto start/stop schedule — for the reconciler to enforce.
+// Paused VMs (manually stopped by the user) are excluded until resumed.
 export async function listScheduledVms(env: Env): Promise<ScheduledVm[]> {
   const res = await env.DB.prepare(
     `SELECT r.id, r.user_email, v.aws_instance_id, v.state,
             r.schedule_start, r.schedule_stop, r.schedule_days
        FROM vm_requests r JOIN vms v ON v.request_id = r.id
       WHERE r.status = 'active' AND r.expired_at IS NULL AND r.schedule_enabled = 1
-        AND v.aws_instance_id IS NOT NULL`
+        AND r.schedule_paused = 0 AND v.aws_instance_id IS NOT NULL`
   ).all<ScheduledVm>();
   return res.results ?? [];
 }
@@ -338,12 +339,21 @@ export async function setSchedule(
   stop: string | null,
   days: string | null
 ): Promise<void> {
+  // Saving a schedule clears any manual pause.
   await env.DB.prepare(
     `UPDATE vm_requests
-        SET schedule_enabled = ?2, schedule_start = ?3, schedule_stop = ?4, schedule_days = ?5
+        SET schedule_enabled = ?2, schedule_start = ?3, schedule_stop = ?4, schedule_days = ?5,
+            schedule_paused = 0
       WHERE id = ?1`
   )
     .bind(id, enabled ? 1 : 0, start, stop, days)
+    .run();
+}
+
+// Pause/resume the schedule (manual stop pauses; manual start or resume clears it).
+export async function setSchedulePaused(env: Env, id: number, paused: boolean): Promise<void> {
+  await env.DB.prepare(`UPDATE vm_requests SET schedule_paused = ?2 WHERE id = ?1`)
+    .bind(id, paused ? 1 : 0)
     .run();
 }
 

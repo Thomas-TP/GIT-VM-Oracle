@@ -303,6 +303,9 @@ const fr = {
     saved: 'Planification enregistrée',
     note: 'Pendant la fenêtre, la VM est maintenue allumée ; en dehors, elle est éteinte. Remplace l’extinction nocturne globale.',
     invalid: 'Choisis une heure de début et de fin (différentes) et au moins un jour.',
+    paused: 'Planification en pause (arrêt manuel) — la VM ne sera pas rallumée automatiquement.',
+    resume: 'Reprendre la planification',
+    resumed: 'Planification reprise',
   },
   extension: {
     title: 'Prolongation',
@@ -629,6 +632,9 @@ const en: typeof fr = {
     saved: 'Schedule saved',
     note: 'Inside the window the VM is kept on; outside, it is shut down. Overrides the global night shutdown.',
     invalid: 'Pick a start and end time (different) and at least one day.',
+    paused: 'Schedule paused (manual stop) — the VM will not be auto-started.',
+    resume: 'Resume schedule',
+    resumed: 'Schedule resumed',
   },
   extension: {
     title: 'Extension',
