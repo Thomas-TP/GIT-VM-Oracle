@@ -45,6 +45,7 @@ export interface PresetCatalog {
   os: OsPreset[];
   storageUsdGbMonth: number;
   region: string;
+  grafanaUrl?: string;
 }
 
 export type Status =

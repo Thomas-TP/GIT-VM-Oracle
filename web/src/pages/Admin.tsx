@@ -132,7 +132,7 @@ export function Admin() {
           {tab === 'users' && <UsersSection rows={rows} />}
           {tab === 'audit' && <AuditSection />}
           {tab === 'metrics' && <MetricsSection stats={stats} metrics={metricsQ.data} rows={rows} catalog={catalog} />}
-          {tab === 'monitoring' && <MonitoringSection />}
+          {tab === 'monitoring' && <MonitoringSection grafanaUrl={catalog?.grafanaUrl} />}
         </div>
       </div>
     </div>
@@ -482,22 +482,23 @@ function AuditSection() {
   );
 }
 
-/* ---------- Monitoring (Grafana) ---------- */
-function MonitoringSection() {
+/* ---------- Monitoring (Grafana Cloud) ---------- */
+function MonitoringSection({ grafanaUrl }: { grafanaUrl?: string }) {
   const { t } = useTranslation();
   const endpoints = ['summary', 'daily', 'os', 'users', 'cost'];
+  const link = grafanaUrl && grafanaUrl.length > 0 ? grafanaUrl : 'https://grafana.com/auth/sign-up/create-user';
   return (
     <div className="space-y-4">
       <SectionTitle title={t('admin.navMonitoring')} hint={t('admin.monHint')} />
       <Card className="p-5">
         <p className="text-sm text-muted-foreground">{t('admin.monIntro')}</p>
         <ol className="mt-3 space-y-2 text-sm">
-          <li>1. {t('admin.monStep1')} <code className="rounded bg-muted px-1.5 py-0.5 text-xs">wrangler secret put GRAFANA_TOKEN</code></li>
-          <li>2. {t('admin.monStep2')} <code className="rounded bg-muted px-1.5 py-0.5 text-xs">docker compose up -d</code> (<code className="text-xs">monitoring/</code>)</li>
+          <li>1. {t('admin.monStep1')}</li>
+          <li>2. {t('admin.monStep2')} <code className="rounded bg-muted px-1.5 py-0.5 text-xs">monitoring/grafana/dashboards/git-vm-portal.json</code></li>
           <li>3. {t('admin.monStep3')}</li>
         </ol>
-        <a href="http://localhost:3000" target="_blank" rel="noreferrer" className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-medium transition hover:bg-muted">
-          {t('admin.monOpen')} ↗
+        <a href={link} target="_blank" rel="noreferrer" className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-medium transition hover:bg-muted">
+          {grafanaUrl ? t('admin.monOpenDash') : t('admin.monOpen')} ↗
         </a>
       </Card>
       <Card className="p-5">
