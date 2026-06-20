@@ -3,10 +3,14 @@ import { initReactI18next } from 'react-i18next';
 
 const fr = {
   app: { title: 'GIT VM Portal', tagline: 'Provisioning de machines virtuelles en self-service' },
+  theme: { label: 'Thème', system: 'Système', light: 'Clair', dark: 'Sombre' },
   nav: { dashboard: 'Mes VMs', admin: 'Administration', logout: 'Déconnexion', create: 'Créer une VM' },
   login: {
     subtitle: 'Connecte-toi avec ton compte Microsoft de l’organisation pour demander et gérer tes machines virtuelles.',
     button: 'Se connecter avec Microsoft',
+    feature1: 'SSO Microsoft sécurisé',
+    feature2: 'Provisioning AWS automatique',
+    feature3: 'Connexion SSH / RDP guidée',
   },
   common: {
     loading: 'Chargement…',
@@ -20,6 +24,7 @@ const fr = {
     none: '—',
     copy: 'Copier',
     copied: 'Copié',
+    skipToContent: 'Aller au contenu',
   },
   status: {
     pending: 'En attente',
@@ -228,6 +233,9 @@ const fr = {
     statActive: 'Actives',
     statProvisioning: 'En création',
     statExpiring: 'Expirent < 24h',
+    welcomeTitle: 'Bienvenue sur GIT VM Portal 👋',
+    welcomeBody: 'Crée ta première VM, choisis un bundle d’outils de cours, et connecte-toi en SSH ou RDP grâce aux guides intégrés. Astuce : appuie sur « n » pour créer une VM.',
+    welcomeDismiss: 'Compris',
   },
   newvm: {
     eyebrow: 'Nouvelle machine virtuelle',
@@ -382,10 +390,14 @@ const fr = {
 
 const en: typeof fr = {
   app: { title: 'GIT VM Portal', tagline: 'Self-service virtual machine provisioning' },
+  theme: { label: 'Theme', system: 'System', light: 'Light', dark: 'Dark' },
   nav: { dashboard: 'My VMs', admin: 'Administration', logout: 'Sign out', create: 'Create a VM' },
   login: {
     subtitle: 'Sign in with your organization Microsoft account to request and manage virtual machines.',
     button: 'Sign in with Microsoft',
+    feature1: 'Secure Microsoft SSO',
+    feature2: 'Automatic AWS provisioning',
+    feature3: 'Guided SSH / RDP connection',
   },
   common: {
     loading: 'Loading…',
@@ -399,6 +411,7 @@ const en: typeof fr = {
     none: '—',
     copy: 'Copy',
     copied: 'Copied',
+    skipToContent: 'Skip to content',
   },
   status: {
     pending: 'Pending',
@@ -607,6 +620,9 @@ const en: typeof fr = {
     statActive: 'Active',
     statProvisioning: 'Provisioning',
     statExpiring: 'Expiring < 24h',
+    welcomeTitle: 'Welcome to GIT VM Portal 👋',
+    welcomeBody: 'Spin up your first VM, pick a course tool bundle, and connect over SSH or RDP with the built-in guides. Tip: press “n” to create a VM.',
+    welcomeDismiss: 'Got it',
   },
   newvm: {
     eyebrow: 'New virtual machine',

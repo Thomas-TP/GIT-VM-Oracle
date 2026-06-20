@@ -183,3 +183,8 @@ export const IconStop = (p: IconProps) => (
   <svg width="16" height="16" viewBox="0 0 24 24" className={p.className}><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" /></svg>
 );
 export const IconReboot = (p: IconProps) => <I {...p} d="M21 12a9 9 0 1 1-2.64-6.36M21 4v5h-5" />;
+export const IconMonitor = (p: IconProps) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" className={p.className}>
+    <rect x="2" y="3" width="20" height="14" rx="2" /><path d="M8 21h8M12 17v4" />
+  </svg>
+);

@@ -1,17 +1,21 @@
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme';
 import { setLang } from '../i18n';
-import { IconMoon, IconSun } from '../ui';
+import { IconMonitor, IconMoon, IconSun } from '../ui';
 
 export function ThemeToggle() {
-  const { theme, toggle } = useTheme();
+  const { t } = useTranslation();
+  const { mode, cycle } = useTheme();
+  const Icon = mode === 'system' ? IconMonitor : mode === 'dark' ? IconMoon : IconSun;
+  const label = `${t('theme.label')} : ${t(`theme.${mode}`)}`;
   return (
     <button
-      onClick={toggle}
-      aria-label="theme"
-      className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground"
+      onClick={cycle}
+      aria-label={label}
+      title={label}
+      className="grid h-8 w-8 place-items-center rounded-lg text-muted-foreground transition hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
     >
-      {theme === 'dark' ? <IconSun className="h-[18px] w-[18px]" /> : <IconMoon className="h-[18px] w-[18px]" />}
+      <Icon className="h-[18px] w-[18px]" />
     </button>
   );
 }

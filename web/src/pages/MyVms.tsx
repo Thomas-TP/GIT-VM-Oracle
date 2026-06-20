@@ -26,6 +26,11 @@ export function MyVms() {
   const toast = useToast();
   const [search, setSearch] = useState('');
   const [termTarget, setTermTarget] = useState<VmRequest | null>(null);
+  const [onboarded, setOnboarded] = useState(() => localStorage.getItem('gitvm_onboarded') === '1');
+  const dismissOnboarding = () => {
+    localStorage.setItem('gitvm_onboarded', '1');
+    setOnboarded(true);
+  };
 
   const presetsQ = useQuery({ queryKey: ['presets'], queryFn: api.presets });
   const reqQ = useQuery({
@@ -96,6 +101,21 @@ export function MyVms() {
           </Button>
         </Link>
       </div>
+
+      {!onboarded && (
+        <div className="flex flex-wrap items-start justify-between gap-4 rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
+          <div className="min-w-0">
+            <p className="font-medium">{t('myvms.welcomeTitle')}</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">{t('myvms.welcomeBody')}</p>
+          </div>
+          <button
+            onClick={dismissOnboarding}
+            className="shrink-0 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium transition hover:bg-muted"
+          >
+            {t('myvms.welcomeDismiss')}
+          </button>
+        </div>
+      )}
 
       {rows.length > 0 && (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

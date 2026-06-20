@@ -1,4 +1,4 @@
-import { type ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
@@ -35,8 +35,29 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
     location.reload();
   }
 
+  // Keyboard shortcuts: n=new, h=home, p=profile, a=admin. Ignored while typing.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable)) return;
+      if (e.key === 'n') { e.preventDefault(); navigate('/new'); }
+      else if (e.key === 'h') navigate('/');
+      else if (e.key === 'p') navigate('/profile');
+      else if (e.key === 'a' && user.role === 'admin') navigate('/admin');
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [navigate, user.role]);
+
   return (
     <div className="min-h-full">
+      <a
+        href="#main"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:border focus:border-border focus:bg-card focus:px-3 focus:py-2 focus:text-sm focus:shadow-lg"
+      >
+        {t('common.skipToContent')}
+      </a>
       <header className="sticky top-0 z-30 border-b border-border bg-background/75 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-5">
           <NavLink to="/" className="flex items-center gap-2.5">
@@ -86,7 +107,7 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-6xl px-5 py-10">{children}</main>
+      <main id="main" className="mx-auto max-w-6xl px-5 py-10">{children}</main>
     </div>
   );
 }
