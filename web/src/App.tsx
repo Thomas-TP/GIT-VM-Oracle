@@ -7,6 +7,7 @@ import { Login } from './pages/Login';
 import { MyVms } from './pages/MyVms';
 import { NewVm } from './pages/NewVm';
 import { Admin } from './pages/Admin';
+import { Profile } from './pages/Profile';
 import { RequestDetail } from './pages/RequestDetail';
 import { Spinner } from './ui';
 
@@ -35,6 +36,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<MyVms />} />
         <Route path="/new" element={<NewVm />} />
+        <Route path="/profile" element={<Profile />} />
         <Route path="/requests/:id" element={<RequestDetail />} />
         <Route path="/admin" element={user.role === 'admin' ? <Admin /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

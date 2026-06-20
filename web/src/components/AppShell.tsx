@@ -68,11 +68,13 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
             <LangToggle />
             <ThemeToggle />
             <div className="mx-1 hidden h-5 w-px bg-border md:block" />
-            <div className="hidden items-center gap-2 md:flex">
-              <span className="grid h-8 w-8 place-items-center rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground">
-                {initials(user.email)}
-              </span>
-            </div>
+            <NavLink
+              to="/profile"
+              title={t('profile.title')}
+              className="hidden h-8 w-8 place-items-center rounded-full border border-border bg-muted text-xs font-semibold text-muted-foreground transition hover:text-foreground md:grid"
+            >
+              {initials(user.email)}
+            </NavLink>
             <button
               onClick={logout}
               aria-label={t('nav.logout')}
