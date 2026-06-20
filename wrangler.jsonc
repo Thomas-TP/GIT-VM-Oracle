@@ -38,7 +38,7 @@
     "AWS_KEY_NAME": "",
 
     "APP_URL": "https://git-vm-portal.thomas-prudhomme.workers.dev",
-    "GRAFANA_URL": "",
+    "GRAFANA_URL": "https://thomastp.grafana.net/d/gitvm-portal/git-vm-portal",
     "MAIL_ENABLED": "true",
     "SCHEDULED_STOP": "true",
     "SENTRY_DSN": "",
