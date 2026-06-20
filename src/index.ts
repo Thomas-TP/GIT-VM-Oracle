@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { getCookie, setCookie, deleteCookie } from 'hono/cookie';
 import type { Env, SessionUser } from './types';
-import { signToken, verifyToken, randomToken, encryptSecret, decryptSecret } from './crypto';
+import { signToken, verifyToken, randomToken, encryptSecret, decryptSecret, courseCallbackToken } from './crypto';
 import { authorizeUrl, exchangeCode, userFromIdToken } from './oidc';
 import {
   PERF,
@@ -52,6 +52,7 @@ import {
   setUserRole,
   addComment,
   listComments,
+  setCourseReady,
   addNotification,
   notifyAdminsInApp,
   listNotifications,
@@ -164,8 +165,14 @@ async function provisionRequest(env: Env, req: any): Promise<string> {
     userData = `<powershell>\nnet user Administrator '${password}'\n</powershell>\n<persist>false</persist>`;
     encPassword = await encryptSecret(env.SESSION_SECRET, password);
   } else {
-    // Linux: preinstall the chosen course's tools via cloud-init (if any).
-    userData = buildCourseUserData(req.course);
+    // Linux: preinstall the chosen course's tools via cloud-init (if any). The
+    // script calls back when done so the UI can show "tools ready".
+    const base = buildCourseUserData(req.course);
+    if (base) {
+      const token = await courseCallbackToken(env.SESSION_SECRET, req.id);
+      const cb = `curl -fsS -X POST "${env.APP_URL}/api/internal/course-done?req=${req.id}&token=${encodeURIComponent(token)}" || true`;
+      userData = `${base}${cb}\n`;
+    }
   }
 
   const kp = await createKeyPair(env, req.id, isWindows ? 'rsa' : 'ed25519');
@@ -490,6 +497,19 @@ app.get('/api/requests/:id/live', apiAuth, async (c) => {
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
   }
+});
+
+// Course-install callback: the VM's cloud-init posts here (token-gated, no session)
+// once the course tools finished installing.
+app.post('/api/internal/course-done', async (c) => {
+  const id = Number(c.req.query('req'));
+  const token = c.req.query('token') ?? '';
+  if (!id || !token) return c.json({ error: 'bad_request' }, 400);
+  const expected = await courseCallbackToken(c.env.SESSION_SECRET, id);
+  if (token !== expected) return c.json({ error: 'forbidden' }, 403);
+  await setCourseReady(c.env, id);
+  await audit(c.env, 'system', 'course.ready', `req:${id}`);
+  return c.json({ ok: true });
 });
 
 // ---- Comments (owner + admins) -----------------------------------------

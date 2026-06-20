@@ -56,6 +56,14 @@ export async function verifyToken<T = any>(secret: string, token: string | undef
   }
 }
 
+// Stateless callback token for the course-install cloud-init script: the VM posts
+// it back when done. Verifiable without storage by recomputing.
+export async function courseCallbackToken(secret: string, id: number): Promise<string> {
+  const key = await hmacKey(secret);
+  const sig = new Uint8Array(await crypto.subtle.sign('HMAC', key, enc.encode(`course:${id}`)));
+  return b64urlEncode(sig).slice(0, 24);
+}
+
 export function randomToken(bytes = 32): string {
   const buf = new Uint8Array(bytes);
   crypto.getRandomValues(buf);

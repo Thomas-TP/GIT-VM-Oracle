@@ -110,6 +110,7 @@ export interface VmRequest {
   region: string;
   status: Status;
   course?: string | null;
+  course_ready_at?: string | null;
   admin_note: string | null;
   decided_by: string | null;
   created_at: string;

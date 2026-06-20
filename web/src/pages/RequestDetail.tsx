@@ -26,6 +26,31 @@ function Eyebrow({ children }: { children: React.ReactNode }) {
   return <h2 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{children}</h2>;
 }
 
+function ProvisionSteps({ status }: { status: string }) {
+  const { t } = useTranslation();
+  const steps = [t('detail.stepRequested'), t('detail.stepApproved'), t('detail.stepProvisioning'), t('detail.stepActive')];
+  const idx = status === 'pending' ? 0 : status === 'approved' ? 1 : status === 'provisioning' ? 2 : 3;
+  return (
+    <div className="flex items-center">
+      {steps.map((label, i) => (
+        <div key={label} className="flex flex-1 items-center last:flex-none">
+          <div className="flex items-center gap-2">
+            <span
+              className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-[11px] font-semibold ${
+                i < idx ? 'bg-primary text-primary-foreground' : i === idx ? 'bg-primary/15 text-primary ring-2 ring-primary/30' : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {i < idx ? '✓' : i + 1}
+            </span>
+            <span className={`whitespace-nowrap text-xs ${i <= idx ? 'font-medium text-foreground' : 'text-muted-foreground'}`}>{label}</span>
+          </div>
+          {i < steps.length - 1 && <span className={`mx-2 h-px flex-1 ${i < idx ? 'bg-primary' : 'bg-border'}`} />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function RequestDetail() {
   const { t } = useTranslation();
   const { id } = useParams();
@@ -37,7 +62,13 @@ export function RequestDetail() {
   const q = useQuery({
     queryKey: ['request', rid],
     queryFn: () => api.getRequest(rid),
-    refetchInterval: (query) => (query.state.data?.status === 'provisioning' ? 5000 : false),
+    refetchInterval: (query) => {
+      const d = query.state.data;
+      if (!d) return false;
+      if (d.status === 'provisioning') return 5000;
+      if (d.status === 'active' && d.course && !d.course_ready_at) return 15000; // wait for cloud-init
+      return false;
+    },
   });
   const meQ = useQuery({ queryKey: ['me'], queryFn: api.me });
   const presetsQ = useQuery({ queryKey: ['presets'], queryFn: api.presets });
@@ -150,6 +181,12 @@ export function RequestDetail() {
         </div>
       </div>
 
+      {(r.status === 'pending' || r.status === 'approved' || r.status === 'provisioning') && (
+        <Card className="p-5">
+          <ProvisionSteps status={r.status} />
+        </Card>
+      )}
+
       <div className="grid gap-5 md:grid-cols-2">
         {/* Specs */}
         <Card className="p-5">
@@ -170,10 +207,23 @@ export function RequestDetail() {
             <Row label={t('common.region')} mono>{r.region}</Row>
           </div>
           {courseDef && (
-            <div className="mt-3 flex flex-wrap gap-1 border-t border-border pt-3">
-              {courseDef.tools.map((tool) => (
-                <span key={tool} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{tool}</span>
-              ))}
+            <div className="mt-3 border-t border-border pt-3">
+              {r.status === 'active' && (
+                <div className="mb-2 text-xs font-medium">
+                  {r.course_ready_at ? (
+                    <span className="text-emerald-600 dark:text-emerald-400">✓ {t('detail.toolsReady')}</span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
+                      <Spinner className="h-3.5 w-3.5" /> {t('detail.toolsInstalling')}
+                    </span>
+                  )}
+                </div>
+              )}
+              <div className="flex flex-wrap gap-1">
+                {courseDef.tools.map((tool) => (
+                  <span key={tool} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{tool}</span>
+                ))}
+              </div>
             </div>
           )}
         </Card>

@@ -468,6 +468,15 @@ export async function markExpired(env: Env, id: number): Promise<void> {
     .run();
 }
 
+// Marks course tools as installed (called back by the VM's cloud-init). Once only.
+export async function setCourseReady(env: Env, id: number): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE vm_requests SET course_ready_at = datetime('now') WHERE id = ?1 AND course_ready_at IS NULL`
+  )
+    .bind(id)
+    .run();
+}
+
 // ---- Extension requests (user asks, admin approves) --------------------
 export async function requestExtension(env: Env, id: number, until: string): Promise<void> {
   await env.DB.prepare(
