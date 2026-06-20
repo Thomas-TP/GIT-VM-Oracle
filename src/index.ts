@@ -78,6 +78,24 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 const app = new Hono<Vars>();
 
+// Security headers on every response (clone so headers from ASSETS/redirects are mutable).
+app.use('*', async (c, next) => {
+  await next();
+  c.res = new Response(c.res.body, c.res);
+  const h = c.res.headers;
+  h.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
+  h.set('X-Content-Type-Options', 'nosniff');
+  h.set('X-Frame-Options', 'DENY');
+  h.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+  h.set('Permissions-Policy', 'geolocation=(), microphone=(), camera=()');
+  h.set(
+    'Content-Security-Policy',
+    "default-src 'self'; img-src 'self' data:; " +
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; " +
+      "script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+  );
+});
+
 function redirectUri(c: { req: { url: string } }): string {
   return new URL(c.req.url).origin + '/auth/callback';
 }
@@ -236,7 +254,7 @@ app.post('/api/requests', apiAuth, async (c) => {
   }
   // Rate limit: max 5 requests per hour per user.
   if ((await countRecentRequests(c.env, user.email, 60)) >= 5) {
-    return c.json({ error: 'rate_limited' }, 429);
+    return c.json({ error: 'rate_limited' }, 429, { 'Retry-After': '3600' });
   }
   const id = await createRequest(
     c.env, user.email, purpose, perf, storage, os, c.env.AWS_REGION,
