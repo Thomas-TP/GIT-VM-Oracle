@@ -241,6 +241,7 @@ app.get('/api/presets', (c) =>
     os: Object.values(OS),
     storageUsdGbMonth: STORAGE_USD_GB_MONTH,
     region: c.env.AWS_REGION,
+    grafanaUrl: c.env.GRAFANA_URL ?? '',
   })
 );
 
@@ -616,7 +617,7 @@ app.post('/api/admin/requests/:id/reject', apiAdmin, async (c) => {
   return c.json({ ok: true });
 });
 
-// ---- Monitoring (Grafana via Infinity datasource) ----------------------
+// ---- Monitoring (Grafana Cloud via Infinity datasource) ----------------
 // Token-gated, no session: Grafana sends `Authorization: Bearer <GRAFANA_TOKEN>`
 // (or ?token=). Returns Infinity-friendly JSON arrays. 503 if the token is unset.
 function monitoringOk(c: any): boolean {

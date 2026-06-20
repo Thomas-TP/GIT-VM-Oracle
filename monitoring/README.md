@@ -1,32 +1,23 @@
-# Monitoring (Grafana local)
+# Monitoring (Grafana Cloud)
 
-Dashboard Grafana qui lit les métriques du portail via des endpoints JSON **token-gated**
-(`/api/monitoring/*`) avec la datasource **Infinity**. Grafana tourne **en local** (Docker).
+Dashboard Grafana **en ligne** qui lit les métriques du portail via des endpoints JSON
+**token-gated** (`/api/monitoring/*`) avec la datasource **Infinity**.
 
-## 1. Définir le token côté portail
+> Grafana ne peut pas tourner sur Cloudflare Workers (c'est un serveur). On utilise donc
+> **Grafana Cloud** (offre gratuite) qui interroge directement les endpoints HTTPS de la prod.
 
-```bash
-# Génère un token fort et déclare-le comme secret Cloudflare
-npx wrangler secret put GRAFANA_TOKEN
-```
+## Mise en route (Grafana Cloud)
 
-Tant que `GRAFANA_TOKEN` n'est pas défini, les endpoints renvoient `503 not_configured`.
-
-## 2. Lancer Grafana
-
-```bash
-cd monitoring
-cp .env.example .env       # renseigne GRAFANA_TOKEN (identique au secret) et PORTAL_URL
-docker compose up -d
-```
-
-Ouvre <http://localhost:3000> (admin / admin). Le dashboard **« GIT VM Portal »** est déjà
-provisionné (datasource Infinity incluse, plugin installé au démarrage).
-
-## 3. Renseigner le token dans le dashboard
-
-En haut du dashboard, deux variables : **Portal URL** (pré-rempli) et **Token**. Colle la valeur de
-`GRAFANA_TOKEN` dans **Token** → les panneaux se chargent.
+1. Crée un compte gratuit sur <https://grafana.com> → une instance Grafana Cloud.
+2. **Connections → Add new connection → Infinity** (installe la source de données, dispo en gratuit).
+   - Dans la config Infinity, onglet *Security* : autorise l'hôte
+     `https://git-vm-portal.thomas-prudhomme.workers.dev`.
+3. **Dashboards → New → Import** → charge [`grafana/dashboards/git-vm-portal.json`](grafana/dashboards/git-vm-portal.json).
+4. En haut du dashboard, renseigne les deux variables :
+   - **Portal URL** : `https://git-vm-portal.thomas-prudhomme.workers.dev` (pré-rempli)
+   - **Token** : la valeur du secret `GRAFANA_TOKEN` (déjà défini côté Cloudflare).
+5. (Optionnel) copie l'URL de ton dashboard dans la variable Cloudflare `GRAFANA_URL` :
+   l'onglet **Monitoring** de l'admin y renverra directement.
 
 ## Endpoints exposés (JSON)
 
@@ -38,11 +29,12 @@ En haut du dashboard, deux variables : **Portal URL** (pré-rempli) et **Token**
 | `/api/monitoring/users`   | `[{user_email, count}]` |
 | `/api/monitoring/cost`    | `[{activeVms, monthlyUsd}]` |
 
-Auth : `Authorization: Bearer <GRAFANA_TOKEN>` **ou** `?token=<GRAFANA_TOKEN>`.
+Auth : `Authorization: Bearer <GRAFANA_TOKEN>` **ou** `?token=<GRAFANA_TOKEN>` (utilisé par le
+dashboard via la variable `$token`). Sans token → `401` ; sans secret défini → `503`.
 
-## Notes
+Rotation du token : `npx wrangler secret put GRAFANA_TOKEN` puis mets à jour la variable du dashboard.
 
-- Le dashboard n'est **pas** embarqué dans le portail en prod : Grafana local (`http://localhost`)
-  ne peut pas être affiché dans une page HTTPS (mixed content + CSP `frame-ancestors`). L'onglet
-  **Monitoring** de l'admin pointe vers `GRAFANA_URL` (variable, optionnelle) et rappelle ces étapes.
-- Pour le dev local du portail : `PORTAL_URL=http://localhost:8787` (déjà autorisé dans la datasource).
+## Alternative : Grafana local (optionnel)
+
+Si tu préfères tester en local : `docker compose up -d` dans ce dossier (Grafana + plugin Infinity
++ datasource/dashboard pré-provisionnés), puis <http://localhost:3000>. Voir `docker-compose.yml`.
