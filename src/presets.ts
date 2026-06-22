@@ -212,6 +212,32 @@ export function buildCourseUserData(courseId: string | null | undefined): string
   return `${COURSE_SCRIPT_HEADER}\n${c.install}\n`;
 }
 
+// Windows (Chocolatey) package mapping per course — best effort equivalents.
+const COURSE_WIN: Record<string, string> = {
+  cloud: 'git azure-cli awscli gcloudsdk terraform kubernetes-cli kubernetes-helm',
+  web: 'git nodejs-lts nginx python',
+  data: 'python r.project',
+  containers: 'kubernetes-cli minikube kubernetes-helm',
+  cyber: 'nmap wireshark',
+  db: 'postgresql sqlite',
+  sysadmin: 'nmap wireshark putty sysinternals',
+  cpp: 'mingw cmake',
+  java: 'temurin17 maven gradle',
+  python: 'python',
+};
+
+// PowerShell that installs Chocolatey then the course's tools (Windows). undefined if none.
+export function buildWindowsCourseInstall(courseId: string | null | undefined): string | undefined {
+  const pkgs = courseId ? COURSE_WIN[courseId] : undefined;
+  if (!pkgs) return undefined;
+  return [
+    "Set-ExecutionPolicy Bypass -Scope Process -Force",
+    "[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072",
+    "iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))",
+    `choco install -y --no-progress ${pkgs}`,
+  ].join('\n');
+}
+
 export const STORAGE_USD_GB_MONTH = 0.0952; // gp3, eu-central-2 (approx)
 const HOURS_PER_MONTH = 730;
 
