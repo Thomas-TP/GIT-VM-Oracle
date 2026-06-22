@@ -64,9 +64,11 @@ import {
   updateSnapshotStatus,
   listPendingSnapshots,
   setSnapshotOnDelete,
-  startSnapshotExport,
-  setSnapshotExport,
-  listExportingSnapshots,
+  createExport,
+  getRunningExport,
+  listExportsForRequest,
+  setExportStatus,
+  listRunningExports,
   listUsers,
   setUserRole,
   addComment,
@@ -746,7 +748,13 @@ app.get('/api/requests/:id/snapshots', apiAuth, async (c) => {
   const id = Number(c.req.param('id'));
   const ctx = await authorizeVm(c, id);
   if (!ctx) return c.json({ error: 'not_found' }, 404);
-  return c.json({ snapshots: await listSnapshotsForRequest(c.env, id) });
+  const snaps = await listSnapshotsForRequest(c.env, id);
+  const exps = await listExportsForRequest(c.env, id);
+  const withExports = snaps.map((s) => ({
+    ...s,
+    exports: exps.filter((e) => e.snapshot_id === s.id).map((e) => ({ target: e.target, status: e.status, url: e.url })),
+  }));
+  return c.json({ snapshots: withExports });
 });
 
 app.get('/api/snapshots', apiAuth, async (c) => {
@@ -765,7 +773,7 @@ app.post('/api/requests/:id/snapshot-on-delete', apiAuth, async (c) => {
   return c.json({ ok: true });
 });
 
-// One-click: generate a downloadable .vmdk/.vdi from a snapshot via an ephemeral helper instance.
+// One-click: generate a downloadable VMware/VirtualBox bundle (config + disk) from a snapshot.
 app.post('/api/requests/:id/snapshots/:sid/export', apiAuth, async (c) => {
   const user = c.get('user');
   const id = Number(c.req.param('id'));
@@ -775,17 +783,17 @@ app.post('/api/requests/:id/snapshots/:sid/export', apiAuth, async (c) => {
   if (!c.env.AWS_EXPORT_BUCKET || !c.env.AWS_EXPORT_PROFILE) return c.json({ error: 'export_not_configured' }, 501);
   const snap = await getSnapshot(c.env, sid, ctx.r.user_email);
   if (!snap || !snap.aws_snapshot_id || snap.status !== 'completed') return c.json({ error: 'snapshot_not_ready' }, 409);
-  if (snap.export_status === 'running') return c.json({ error: 'export_in_progress' }, 409);
-  const fmtRaw = String((await c.req.json().catch(() => ({}))).format ?? 'vmdk').toLowerCase();
-  const format = fmtRaw === 'vdi' ? 'vdi' : 'vmdk';
+  const targetRaw = String((await c.req.json().catch(() => ({}))).target ?? 'vmware').toLowerCase();
+  const target = targetRaw === 'virtualbox' ? 'virtualbox' : 'vmware';
+  if (await getRunningExport(c.env, sid, target)) return c.json({ error: 'export_in_progress' }, 409);
   const bucket = c.env.AWS_EXPORT_BUCKET;
-  const key = `exports/req${id}-snap${sid}-${Date.now()}.${format}`;
+  const key = `exports/req${id}-snap${sid}-${target}-${Date.now()}.zip`;
   const sizeGb = snap.size_gb ?? 30;
-  const userData = exportUserData({ region: c.env.AWS_REGION, snapshotId: snap.aws_snapshot_id, bucket, key, format });
+  const userData = exportUserData({ region: c.env.AWS_REGION, snapshotId: snap.aws_snapshot_id, bucket, key, target, name: `gitvm-${id}`, guest: guestType(ctx.r.os) });
   try {
-    const instanceId = await runExportHelper(c.env, { snapshotId: snap.aws_snapshot_id, profileName: c.env.AWS_EXPORT_PROFILE, userData, rootSizeGb: sizeGb + 14 });
-    await startSnapshotExport(c.env, sid, format, key, instanceId);
-    await audit(c.env, user.email, 'snapshot.export.start', `snap:${sid}`, `${format} ${instanceId}`);
+    const instanceId = await runExportHelper(c.env, { snapshotId: snap.aws_snapshot_id, profileName: c.env.AWS_EXPORT_PROFILE, userData, rootSizeGb: sizeGb * 2 + 18 });
+    await createExport(c.env, sid, ctx.r.user_email, target, key, instanceId);
+    await audit(c.env, user.email, 'snapshot.export.start', `snap:${sid}`, `${target} ${instanceId}`);
     return c.json({ ok: true, status: 'running' });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
@@ -1224,39 +1232,71 @@ async function syncSnapshots(env: Env): Promise<void> {
   }
 }
 
-// Poll running disk exports: when the helper has uploaded the file, presign it.
+// Poll running exports: when the helper has uploaded the bundle, presign it.
 // Reap any helper instance that overran (cost guard) and fail its export.
 async function syncExports(env: Env): Promise<void> {
   if (!env.AWS_EXPORT_BUCKET) return;
-  const EXPORT_TIMEOUT_MS = 40 * 60 * 1000;
-  for (const s of await listExportingSnapshots(env)) {
+  const TIMEOUT = 45 * 60 * 1000;
+  for (const e of await listRunningExports(env)) {
     try {
-      if (s.export_key && (await s3ObjectExists(env, env.AWS_EXPORT_BUCKET, s.export_key))) {
-        const url = await s3PresignGet(env, env.AWS_EXPORT_BUCKET, s.export_key);
-        await setSnapshotExport(env, s.id, 'ready', url);
+      if (e.s3_key && (await s3ObjectExists(env, env.AWS_EXPORT_BUCKET, e.s3_key))) {
+        const url = await s3PresignGet(env, env.AWS_EXPORT_BUCKET, e.s3_key);
+        await setExportStatus(env, e.id, 'ready', url);
         continue;
       }
-      const started = s.export_started_at ? Date.parse(s.export_started_at + 'Z') : Date.now();
-      if (Date.now() - started > EXPORT_TIMEOUT_MS) {
-        await setSnapshotExport(env, s.id, 'error');
-        if (s.export_instance_id) await terminateInstance(env, s.export_instance_id).catch(() => {});
+      const started = e.started_at ? Date.parse(e.started_at + 'Z') : Date.now();
+      if (Date.now() - started > TIMEOUT) {
+        await setExportStatus(env, e.id, 'error');
+        if (e.instance_id) await terminateInstance(env, e.instance_id).catch(() => {});
       }
     } catch {
       /* skip this tick */
     }
   }
-  // Belt-and-suspenders: kill any export helper running > 45 min, regardless of DB state.
+  // Belt-and-suspenders: kill any export helper running > 50 min, regardless of DB state.
   try {
     for (const h of await listExportHelpers(env)) {
-      if (Date.now() - Date.parse(h.launchTime) > 45 * 60 * 1000) await terminateInstance(env, h.id).catch(() => {});
+      if (Date.now() - Date.parse(h.launchTime) > 50 * 60 * 1000) await terminateInstance(env, h.id).catch(() => {});
     }
   } catch {
     /* skip */
   }
 }
 
-// Bootstrap script for the throwaway converter instance (Amazon Linux 2023).
-function exportUserData(p: { region: string; snapshotId: string; bucket: string; key: string; format: string }): string {
+// VMware guestOS / VirtualBox OSType identifiers per OS family.
+function guestType(osId: string | null | undefined): { vmware: string; vbox: string } {
+  const fam = osId ? OS[osId]?.family : undefined;
+  switch (fam) {
+    case 'ubuntu': return { vmware: 'ubuntu-64', vbox: 'Ubuntu_64' };
+    case 'debian': return { vmware: 'debian10-64', vbox: 'Debian_64' };
+    case 'windows': return { vmware: 'windows9-64', vbox: 'Windows10_64' };
+    case 'rocky':
+    case 'alma': return { vmware: 'centos-64', vbox: 'RedHat_64' };
+    default: return { vmware: 'otherlinux-64', vbox: 'Linux_64' };
+  }
+}
+
+// Bootstrap for the throwaway converter (Amazon Linux 2023): snapshot -> disk -> descriptor -> zip -> S3.
+function exportUserData(p: { region: string; snapshotId: string; bucket: string; key: string; target: string; name: string; guest: { vmware: string; vbox: string } }): string {
+  const isVbox = p.target === 'virtualbox';
+  const fmt = isVbox ? 'vdi' : 'vmdk';
+  const disk = `${p.name}.${fmt}`;
+  const py = isVbox
+    ? [
+        'import uuid',
+        `disk="${disk}"`,
+        "raw=open(disk,'rb').read(0x198)",
+        'u=str(uuid.UUID(bytes_le=raw[0x188:0x188+16]))',
+        'm=str(uuid.uuid4())',
+        `x='<?xml version="1.0"?>\\n<VirtualBox xmlns="http://www.virtualbox.org/" version="1.18-linux">\\n  <Machine uuid="{'+m+'}" name="${p.name}" OSType="${p.guest.vbox}" snapshotFolder="Snapshots">\\n    <MediaRegistry><HardDisks><HardDisk uuid="{'+u+'}" location="'+disk+'" format="VDI" type="Normal"/></HardDisks></MediaRegistry>\\n    <Hardware><CPU count="2"/><Memory RAMSize="2048"/></Hardware>\\n    <StorageControllers><StorageController name="SATA" type="AHCI" PortCount="1" useHostIOCache="false" Bootable="true"><AttachedDevice type="HardDisk" hotpluggable="false" port="0" device="0"><Image uuid="{'+u+'}"/></AttachedDevice></StorageController></StorageControllers>\\n  </Machine>\\n</VirtualBox>\\n'`,
+        `open("${p.name}.vbox","w").write(x)`,
+      ].join('\n')
+    : [
+        `disk="${disk}"`,
+        `x='.encoding = "UTF-8"\\nconfig.version = "8"\\nvirtualHW.version = "19"\\ndisplayName = "${p.name}"\\nguestOS = "${p.guest.vmware}"\\nmemsize = "2048"\\nnumvcpus = "2"\\nscsi0.present = "TRUE"\\nscsi0.virtualDev = "lsilogic"\\nscsi0:0.present = "TRUE"\\nscsi0:0.fileName = "'+disk+'"\\nethernet0.present = "TRUE"\\nethernet0.connectionType = "nat"\\n'`,
+        `open("${p.name}.vmx","w").write(x)`,
+      ].join('\n');
+  const desc = isVbox ? `${p.name}.vbox` : `${p.name}.vmx`;
   return `#!/bin/bash
 exec > /var/log/gitvm-export.log 2>&1
 set -x
@@ -1264,8 +1304,7 @@ REGION="${p.region}"
 SNAP="${p.snapshotId}"
 BUCKET="${p.bucket}"
 KEY="${p.key}"
-FMT="${p.format}"
-dnf install -y qemu-img || true
+dnf install -y qemu-img zip python3 || true
 TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 600")
 md() { curl -s -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/$1"; }
 IID=$(md instance-id)
@@ -1273,11 +1312,15 @@ AZ=$(md placement/availability-zone)
 VOL=$(aws ec2 create-volume --region "$REGION" --snapshot-id "$SNAP" --availability-zone "$AZ" --volume-type gp3 --tag-specifications 'ResourceType=volume,Tags=[{Key=managed-by,Value=git-vm-portal-export}]' --query VolumeId --output text)
 aws ec2 wait volume-available --region "$REGION" --volume-ids "$VOL"
 aws ec2 attach-volume --region "$REGION" --volume-id "$VOL" --instance-id "$IID" --device /dev/sdf
-# Delete this scratch volume when the instance terminates (cost guard if the script dies).
 aws ec2 modify-instance-attribute --region "$REGION" --instance-id "$IID" --block-device-mappings '[{"DeviceName":"/dev/sdf","Ebs":{"DeleteOnTermination":true}}]' || true
 for i in $(seq 1 40); do DEV=$(lsblk -dpno NAME | grep -E 'nvme[1-9]n1$' | head -1); [ -n "$DEV" ] && break; sleep 3; done
-qemu-img convert -p -f raw -O "$FMT" "$DEV" "/disk.$FMT"
-aws s3 cp "/disk.$FMT" "s3://$BUCKET/$KEY"
+cd /root
+qemu-img convert -p -f raw -O ${fmt} "$DEV" "${disk}"
+python3 - <<'PYEOF'
+${py}
+PYEOF
+zip -j bundle.zip "${disk}" "${desc}"
+aws s3 cp bundle.zip "s3://$BUCKET/$KEY"
 aws ec2 detach-volume --region "$REGION" --volume-id "$VOL" || true
 sleep 8
 aws ec2 delete-volume --region "$REGION" --volume-id "$VOL" || true
