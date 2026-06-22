@@ -214,10 +214,10 @@ export function buildCourseUserData(courseId: string | null | undefined): string
 
 // Windows (Chocolatey) package mapping per course — best effort equivalents.
 const COURSE_WIN: Record<string, string> = {
-  cloud: 'git azure-cli awscli gcloudsdk terraform kubernetes-cli kubernetes-helm',
+  cloud: 'git azure-cli awscli gcloudsdk terraform kubernetes-cli kubernetes-helm docker-cli docker-engine',
   web: 'git nodejs-lts nginx python',
   data: 'python r.project',
-  containers: 'kubernetes-cli minikube kubernetes-helm',
+  containers: 'docker-cli docker-engine kubernetes-cli minikube kubernetes-helm',
   cyber: 'nmap wireshark',
   db: 'postgresql sqlite',
   sysadmin: 'nmap wireshark putty sysinternals',
