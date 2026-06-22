@@ -4,7 +4,7 @@ import type { PerfPreset, VmRequest } from '../types';
 import { fmtDate } from '../lib/format';
 import { displayStatus } from '../lib/status';
 import { StatusBadge } from './StatusBadge';
-import { IconDownload, IconServer, IconTrash, Spinner } from '../ui';
+import { IconDownload, IconServer, IconTrash, IconX, Spinner } from '../ui';
 import { api } from '../api';
 
 interface Props {
@@ -13,9 +13,11 @@ interface Props {
   admin?: boolean;
   busyId?: number | null;
   onTerminate?: (r: VmRequest) => void;
+  onDelete?: (r: VmRequest) => void;
 }
 
 const canTerminate = (s: string) => s === 'active' || s === 'provisioning' || s === 'failed';
+const canDelete = (r: VmRequest) => !!r.expired_at || r.status === 'terminated' || r.status === 'rejected' || r.status === 'failed';
 
 function IconBtn({
   children,
@@ -40,7 +42,7 @@ function IconBtn({
   );
 }
 
-export function RequestsTable({ rows, presets, admin, busyId, onTerminate }: Props) {
+export function RequestsTable({ rows, presets, admin, busyId, onTerminate, onDelete }: Props) {
   const { t } = useTranslation();
   const label = (id: string) => presets[id]?.label ?? id;
   const eff = displayStatus;
@@ -65,6 +67,11 @@ export function RequestsTable({ rows, presets, admin, busyId, onTerminate }: Pro
         {!admin && canTerminate(r.status) && (
           <IconBtn disabled={busy} onClick={() => onTerminate?.(r)} title={t('actions.terminate')}>
             {busy ? <Spinner className="h-4 w-4" /> : <IconTrash className="h-4 w-4 text-red-600" />}
+          </IconBtn>
+        )}
+        {!admin && onDelete && canDelete(r) && (
+          <IconBtn disabled={busy} onClick={() => onDelete(r)} title={t('actions.delete')}>
+            <IconX className="h-4 w-4 text-muted-foreground" />
           </IconBtn>
         )}
         <Link
