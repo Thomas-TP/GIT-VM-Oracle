@@ -186,6 +186,10 @@ const fr = {
     monOpen: 'Créer un compte Grafana Cloud',
     monOpenDash: 'Ouvrir le dashboard',
     monEndpoints: 'Endpoints (datasource Infinity)',
+    dashComplete: 'Dashboard complet',
+    dashCost: 'Coûts',
+    dashVms: 'Machines',
+    dashLogs: 'Logs / Audit',
   },
   metric: {
     total: 'Demandes totales',
@@ -585,6 +589,10 @@ const en: typeof fr = {
     monOpen: 'Create a Grafana Cloud account',
     monOpenDash: 'Open the dashboard',
     monEndpoints: 'Endpoints (Infinity datasource)',
+    dashComplete: 'Full dashboard',
+    dashCost: 'Cost',
+    dashVms: 'Machines',
+    dashLogs: 'Logs / Audit',
   },
   metric: {
     total: 'Total requests',

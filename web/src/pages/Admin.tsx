@@ -7,20 +7,14 @@ import { useToast } from '../toast';
 import type { AuditEntry, Metrics, OsPreset, PerfPreset, PresetCatalog, Status, VmRequest } from '../types';
 import { Button, Card, IconDownload, IconPlay, IconReboot, IconStop, IconTrash, Select, Spinner, TableSkeleton } from '../ui';
 import { fmtDate } from '../lib/format';
-import { StatusBadge } from '../components/StatusBadge';
 import { OsIcon } from '../components/OsIcon';
 import { RequestsTable } from '../components/RequestsTable';
 import { UsersPanel } from '../components/UsersPanel';
 
-type Tab = 'overview' | 'requests' | 'machines' | 'users' | 'audit' | 'metrics' | 'monitoring';
+type Tab = 'overview' | 'requests' | 'machines' | 'users' | 'monitoring';
 const PER_PAGE = 10;
 
 /* ---------- shared bits ---------- */
-function fmtSeconds(s: number): string {
-  if (!s) return '—';
-  if (s < 60) return `${s}s`;
-  return `${Math.floor(s / 60)}m ${s % 60}s`;
-}
 function StatCard({ label, value, dot }: { label: string; value: number; dot: string }) {
   return (
     <Card className="p-4">
@@ -60,8 +54,6 @@ const ICONS: Record<Tab, string> = {
   requests: 'M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01',
   machines: 'M5 4h14a2 2 0 0 1 2 2v3H3V6a2 2 0 0 1 2-2zM3 15h18v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM7 7h.01M7 18h.01',
   users: 'M16 21v-2a4 4 0 0 0-8 0v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
-  audit: 'M12 8v4l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0z',
-  metrics: 'M3 3v18h18M7 14l3-3 3 3 5-6',
   monitoring: 'M22 12h-4l-3 9L9 3l-3 9H2',
 };
 
@@ -89,8 +81,6 @@ export function Admin() {
     { id: 'requests', label: t('admin.navRequests'), badge: pending },
     { id: 'machines', label: t('admin.navMachines') },
     { id: 'users', label: t('admin.navUsers') },
-    { id: 'audit', label: t('admin.navAudit') },
-    { id: 'metrics', label: t('admin.navMetrics') },
     { id: 'monitoring', label: t('admin.navMonitoring') },
   ];
 
@@ -130,8 +120,6 @@ export function Admin() {
           {tab === 'requests' && <RequestsSection rows={rows} loading={allQ.isLoading} catalog={catalog} />}
           {tab === 'machines' && <MachinesSection rows={rows} loading={allQ.isLoading} catalog={catalog} />}
           {tab === 'users' && <UsersSection rows={rows} />}
-          {tab === 'audit' && <AuditSection />}
-          {tab === 'metrics' && <MetricsSection stats={stats} metrics={metricsQ.data} rows={rows} catalog={catalog} />}
           {tab === 'monitoring' && <MonitoringSection grafanaUrl={catalog?.grafanaUrl} />}
         </div>
       </div>
@@ -406,107 +394,59 @@ function AuditList({ entries, compact }: { entries: AuditEntry[]; compact?: bool
     </div>
   );
 }
-function AuditSection() {
-  const { t } = useTranslation();
-  const auditQ = useQuery({ queryKey: ['admin-audit', 200], queryFn: () => api.adminAudit(200), refetchInterval: 15000 });
-  return (
-    <div className="space-y-4">
-      <SectionTitle title={t('admin.auditTitle')} hint={t('admin.auditHint')} />
-      {auditQ.isLoading ? (
-        <TableSkeleton rows={8} />
-      ) : (
-        <Card className="p-4">
-          <AuditList entries={auditQ.data ?? []} />
-        </Card>
-      )}
-    </div>
-  );
-}
-
 /* ---------- Monitoring (Grafana Cloud) ---------- */
 function MonitoringSection({ grafanaUrl }: { grafanaUrl?: string }) {
   const { t } = useTranslation();
-  const endpoints = ['summary', 'daily', 'os', 'users', 'cost'];
-  const link = grafanaUrl && grafanaUrl.length > 0 ? grafanaUrl : 'https://grafana.com/auth/sign-up/create-user';
+  let base = '';
+  try {
+    if (grafanaUrl) base = new URL(grafanaUrl).origin;
+  } catch {
+    /* ignore */
+  }
+  const dashboards = [
+    { uid: 'gitvm-portal', label: t('admin.dashComplete') },
+    { uid: 'gitvm-cost', label: t('admin.dashCost') },
+    { uid: 'gitvm-vms', label: t('admin.dashVms') },
+    { uid: 'gitvm-logs', label: t('admin.dashLogs') },
+  ];
   return (
     <div className="space-y-4">
       <SectionTitle title={t('admin.navMonitoring')} hint={t('admin.monHint')} />
-      <Card className="p-5">
-        <p className="text-sm text-muted-foreground">{t('admin.monIntro')}</p>
-        <ol className="mt-3 space-y-2 text-sm">
-          <li>1. {t('admin.monStep1')}</li>
-          <li>2. {t('admin.monStep2')} <code className="rounded bg-muted px-1.5 py-0.5 text-xs">monitoring/grafana/dashboards/git-vm-portal.json</code></li>
-          <li>3. {t('admin.monStep3')}</li>
-        </ol>
-        <a href={link} target="_blank" rel="noreferrer" className="mt-4 inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-medium transition hover:bg-muted">
-          {grafanaUrl ? t('admin.monOpenDash') : t('admin.monOpen')} ↗
-        </a>
-      </Card>
+      {base ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {dashboards.map((d) => (
+            <a
+              key={d.uid}
+              href={`${base}/d/${d.uid}`}
+              target="_blank"
+              rel="noreferrer"
+              className="flex items-center justify-between rounded-xl border border-border bg-card p-4 font-medium transition hover:border-foreground/25 hover:bg-muted/40"
+            >
+              {d.label}
+              <span className="text-muted-foreground">↗</span>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <Card className="p-5">
+          <p className="text-sm text-muted-foreground">{t('admin.monIntro')}</p>
+          <a
+            href="https://grafana.com/auth/sign-up/create-user"
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3.5 text-sm font-medium transition hover:bg-muted"
+          >
+            {t('admin.monOpen')} ↗
+          </a>
+        </Card>
+      )}
       <Card className="p-5">
         <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('admin.monEndpoints')}</h3>
-        <ul className="space-y-1.5">
-          {endpoints.map((e) => (
+        <ul className="grid gap-1.5 sm:grid-cols-2">
+          {['summary', 'daily', 'os', 'users', 'cost', 'metrics', 'audit'].map((e) => (
             <li key={e}><code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">/api/monitoring/{e}</code></li>
           ))}
         </ul>
-      </Card>
-    </div>
-  );
-}
-
-/* ---------- Metrics & cost ---------- */
-function MetricsSection({ stats, metrics, rows, catalog }: { stats: Record<string, number>; metrics?: Metrics; rows: VmRequest[]; catalog?: PresetCatalog }) {
-  const { t } = useTranslation();
-  const monthlyCost = useMemo(() => {
-    if (!catalog) return 0;
-    const perf = Object.fromEntries(catalog.perf.map((p) => [p.id, p]));
-    const storage = Object.fromEntries(catalog.storage.map((s) => [s.id, s]));
-    return rows
-      .filter((r) => r.status === 'active' && !r.expired_at)
-      .reduce((sum, r) => {
-        const p = r.preset ? perf[r.preset] : undefined;
-        const s = r.storage ? storage[r.storage] : undefined;
-        if (!p || !s) return sum;
-        return sum + p.hourlyUsd * 730 + s.sizeGb * catalog.storageUsdGbMonth;
-      }, 0);
-  }, [rows, catalog]);
-
-  const order: Status[] = ['pending', 'provisioning', 'active', 'expired', 'failed', 'rejected', 'terminated'];
-  const total = order.reduce((a, s) => a + (stats[s] ?? 0), 0) || 1;
-
-  return (
-    <div className="space-y-6">
-      <SectionTitle title={t('admin.metricsTitle')} />
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <MetricCard label={t('metric.successRate')} value={`${Math.round((metrics?.successRate ?? 1) * 100)}%`} />
-        <MetricCard label={t('metric.avgProvision')} value={fmtSeconds(metrics?.avgProvisionSeconds ?? 0)} />
-        <MetricCard label={t('metric.total')} value={String(metrics?.total ?? 0)} />
-      </div>
-
-      <Card className="p-5">
-        <div className="flex items-baseline justify-between">
-          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('admin.costTitle')}</h3>
-          <span className="text-2xl font-semibold tabular-nums">≈ ${monthlyCost.toFixed(2)}</span>
-        </div>
-        <p className="mt-1 text-xs text-muted-foreground">{t('admin.costHint')}</p>
-      </Card>
-
-      <Card className="p-5">
-        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('admin.stats')}</h3>
-        <div className="space-y-2">
-          {order.map((s) => {
-            const n = stats[s] ?? 0;
-            return (
-              <div key={s} className="flex items-center gap-3">
-                <div className="w-24 shrink-0"><StatusBadge status={s} /></div>
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                  <div className="h-full rounded-full bg-primary/70" style={{ width: `${(n / total) * 100}%` }} />
-                </div>
-                <span className="w-8 shrink-0 text-right text-sm font-semibold tabular-nums">{n}</span>
-              </div>
-            );
-          })}
-        </div>
       </Card>
     </div>
   );
