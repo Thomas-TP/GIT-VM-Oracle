@@ -72,6 +72,8 @@ export interface LaunchParams {
   sizeGb: number;
   /** Cloud-init / EC2Launch bootstrap script (raw text, base64-encoded here). */
   userData?: string;
+  /** User-chosen VM name -> EC2 Name tag (falls back to vm-portal-req-<id>). */
+  nameTag?: string | null;
 }
 
 // The root volume device name depends on the AMI (Ubuntu /dev/sda1, Debian /dev/xvda…).
@@ -103,7 +105,7 @@ export async function launchInstance(env: Env, p: LaunchParams): Promise<LaunchR
     'BlockDeviceMapping.1.Ebs.DeleteOnTermination': 'true',
     'TagSpecification.1.ResourceType': 'instance',
     'TagSpecification.1.Tag.1.Key': 'Name',
-    'TagSpecification.1.Tag.1.Value': `vm-portal-req-${p.requestId}`,
+    'TagSpecification.1.Tag.1.Value': (p.nameTag && p.nameTag.trim()) ? p.nameTag.trim().slice(0, 255) : `vm-portal-req-${p.requestId}`,
     'TagSpecification.1.Tag.2.Key': 'managed-by',
     'TagSpecification.1.Tag.2.Value': 'git-vm-portal',
     'TagSpecification.1.Tag.3.Key': 'request-id',

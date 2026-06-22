@@ -233,6 +233,7 @@ async function provisionRequest(env: Env, req: any): Promise<string> {
     amiId,
     sizeGb,
     userData,
+    nameTag: req.name ?? null,
   });
   await createVm(env, req.id, instanceId, kp.keyName, encKey, os.sshUser, os.connect, encPassword);
   return instanceId;
@@ -376,11 +377,12 @@ app.post('/api/requests/batch', apiAuth, async (c) => {
   const vms = Array.isArray(body.vms) ? body.vms : [];
   if (vms.length < 1 || vms.length > 4) return c.json({ error: 'invalid_count' }, 400);
   const now = Date.now();
-  const parsed: { perf: string; storage: string; os: string; purpose: string; course: string; start: string | null; end: string; restoreSnapshotId: number | null }[] = [];
+  const parsed: { name: string; perf: string; storage: string; os: string; purpose: string; course: string; start: string | null; end: string; restoreSnapshotId: number | null }[] = [];
   for (const v of vms) {
     const perf = String(v.perf ?? ''), storage = String(v.storage ?? ''), os = String(v.os ?? '');
     const purpose = String(v.purpose ?? '').trim(), course = String(v.course ?? '');
-    if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !isValidCourse(course) || !purpose) {
+    const name = String(v.name ?? '').trim().slice(0, 60);
+    if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !isValidCourse(course) || !purpose || !name) {
       return c.json({ error: 'invalid_request' }, 400);
     }
     if (OS[os].minStorageGb && STORAGE[storage].sizeGb < OS[os].minStorageGb!) return c.json({ error: 'storage_too_small' }, 400);
@@ -389,7 +391,7 @@ app.post('/api/requests/batch', apiAuth, async (c) => {
     if (!end || isNaN(end.getTime()) || end.getTime() <= now) return c.json({ error: 'invalid_end_date' }, 400);
     if (start && (isNaN(start.getTime()) || start.getTime() >= end.getTime())) return c.json({ error: 'invalid_start_date' }, 400);
     const restoreSnapshotId = v.snapshotId && Number.isInteger(Number(v.snapshotId)) ? Number(v.snapshotId) : null;
-    parsed.push({ perf, storage, os, purpose, course, start: start ? start.toISOString() : null, end: end.toISOString(), restoreSnapshotId });
+    parsed.push({ name, perf, storage, os, purpose, course, start: start ? start.toISOString() : null, end: end.toISOString(), restoreSnapshotId });
   }
   if ((await countRecentRequests(c.env, user.email, 60)) + parsed.length > 10) {
     return c.json({ error: 'rate_limited' }, 429, { 'Retry-After': '3600' });
@@ -401,7 +403,7 @@ app.post('/api/requests/batch', apiAuth, async (c) => {
   const ids: number[] = [];
   for (const p of parsed) {
     const id = await createRequest(
-      c.env, user.email, p.purpose, p.perf, p.storage, p.os, c.env.AWS_REGION, p.start, p.end, p.course || null, groupId, groupName, p.restoreSnapshotId
+      c.env, user.email, p.purpose, p.perf, p.storage, p.os, c.env.AWS_REGION, p.start, p.end, p.course || null, groupId, groupName, p.restoreSnapshotId, p.name
     );
     ids.push(id);
     await audit(c.env, user.email, 'request.create', `req:${id}`, `${p.perf}/${p.storage}/${p.os}${groupId ? ` grp:${groupId}` : ''}`);

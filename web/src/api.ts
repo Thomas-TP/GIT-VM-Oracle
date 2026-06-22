@@ -44,7 +44,7 @@ export const api = {
       body: JSON.stringify({ perf, storage, os, purpose, startDate, endDate, course }),
     }),
   createBatch: (
-    vms: { perf: string; storage: string; os: string; purpose: string; startDate: string | null; endDate: string; course: string; snapshotId?: number | null }[],
+    vms: { name: string; perf: string; storage: string; os: string; purpose: string; startDate: string | null; endDate: string; course: string; snapshotId?: number | null }[],
     group?: { name: string }
   ) => req<{ ids: number[]; groupId: string | null; groupName: string | null }>('/api/requests/batch', {
     method: 'POST',

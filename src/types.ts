@@ -43,6 +43,7 @@ export interface SessionUser {
 export interface VmRequestRow {
   id: number;
   user_email: string;
+  name: string | null;
   purpose: string;
   preset: string; // performance preset id (eco/std/perf/pro)
   storage: string | null;

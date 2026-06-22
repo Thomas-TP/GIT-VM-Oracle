@@ -124,6 +124,7 @@ export interface SnapshotExport {
 export interface VmRequest {
   id: number;
   user_email: string;
+  name: string | null;
   purpose: string;
   preset: string; // performance preset id
   storage: string | null;

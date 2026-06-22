@@ -24,6 +24,7 @@ const QUICK = [
 ];
 
 interface VmCfg {
+  name: string;
   perf: string;
   storage: string;
   os: string;
@@ -90,6 +91,10 @@ function VmConfig({ vm, onChange, catalog, snapshots }: { vm: VmCfg; onChange: (
 
   return (
     <div className="space-y-8">
+      <label className="block">
+        <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('newvm.vmName')}</span>
+        <Input value={vm.name} onChange={(e) => onChange({ name: e.target.value })} placeholder={t('newvm.vmNamePlaceholder')} maxLength={60} />
+      </label>
       {snapshots.length > 0 && (
         <div className="rounded-xl border border-border bg-muted/30 p-3.5">
           <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('newvm.restore')}</span>
@@ -246,6 +251,7 @@ export function NewVm() {
 function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: ReturnType<typeof useNavigate>; qc: ReturnType<typeof useQueryClient>; toast: ReturnType<typeof useToast> }) {
   const { t } = useTranslation();
   const makeDefault = (): VmCfg => ({
+    name: '',
     perf: catalog.perf.find((p) => p.recommended)?.id ?? catalog.perf.find((p) => !p.hidden)?.id ?? '',
     storage: catalog.storage.find((s) => s.recommended)?.id ?? catalog.storage.find((s) => !s.hidden && s.sizeGb >= 30)?.id ?? '',
     os: catalog.os.find((o) => o.recommended)?.id ?? catalog.os.find((o) => !o.hidden)?.id ?? '',
@@ -277,7 +283,7 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
   const applyToAll = () => setVms((prev) => prev.map(() => ({ ...prev[active] })));
 
   const validVm = (vm: VmCfg) => {
-    if (!vm.perf || !vm.storage || !vm.os) return false;
+    if (!vm.name.trim() || !vm.perf || !vm.storage || !vm.os) return false;
     const end = vm.end ? new Date(vm.end) : null;
     const start = vm.start ? new Date(vm.start) : null;
     if (!end || isNaN(end.getTime()) || end.getTime() <= Date.now()) return false;
@@ -299,7 +305,7 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
   const m = useMutation({
     mutationFn: () =>
       api.createBatch(
-        vms.map((v) => ({ perf: v.perf, storage: v.storage, os: v.os, purpose: purpose.trim(), startDate: v.start ? new Date(v.start).toISOString() : null, endDate: new Date(v.end).toISOString(), course: v.course, snapshotId: v.snapshotId ? Number(v.snapshotId) : null })),
+        vms.map((v) => ({ name: v.name.trim(), perf: v.perf, storage: v.storage, os: v.os, purpose: purpose.trim(), startDate: v.start ? new Date(v.start).toISOString() : null, endDate: new Date(v.end).toISOString(), course: v.course, snapshotId: v.snapshotId ? Number(v.snapshotId) : null })),
         needsGroup ? { name: groupName.trim() } : undefined
       ),
     onSuccess: (res) => {
@@ -361,7 +367,7 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
                   onClick={() => setActive(i)}
                   className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-sm font-medium transition ${active === i ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
                 >
-                  {t('newvm.vmN', { n: i + 1 })}
+                  {v.name.trim() || t('newvm.vmN', { n: i + 1 })}
                   <span className={`h-1.5 w-1.5 rounded-full ${validVm(v) ? 'bg-emerald-500' : 'bg-amber-500'}`} />
                 </button>
               ))}
@@ -388,7 +394,7 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
                   <div key={i} className="flex items-center justify-between gap-2 text-sm">
                     <span className="flex items-center gap-1.5">
                       {osDef && <OsIcon family={osDef.family} className="h-4 w-4" />}
-                      {count > 1 ? t('newvm.vmN', { n: i + 1 }) : (osDef?.label ?? '—')}
+                      {v.name.trim() || (count > 1 ? t('newvm.vmN', { n: i + 1 }) : (osDef?.label ?? '—'))}
                     </span>
                     <span className="text-right text-xs text-muted-foreground tabular-nums">≈ ${monthlyOf(v).toFixed(0)}/{t('newvm.month')}</span>
                   </div>

@@ -247,10 +247,10 @@ export function RequestDetail() {
           {osDef && <OsIcon family={osDef.family} className="h-10 w-10" />}
           <div>
             <div className="flex items-center gap-2.5">
-              <h1 className="text-2xl font-semibold tracking-tight">{t('detail.title', { id: r.id })}</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">{r.name || t('detail.title', { id: r.id })}</h1>
               <StatusBadge status={effStatus} />
             </div>
-            <p className="text-sm text-muted-foreground">{osDef?.label ?? r.os}</p>
+            <p className="text-sm text-muted-foreground">{osDef?.label ?? r.os} · #{String(r.id).padStart(3, '0')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">

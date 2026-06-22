@@ -107,9 +107,10 @@ export function RequestsTable({ rows, presets, admin, busyId, onTerminate, onDel
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-border/70 transition last:border-0 hover:bg-muted/40">
                   <td className="px-3.5 py-3">
-                    <Link to={`/requests/${r.id}`} className="font-mono text-xs text-muted-foreground hover:text-foreground">
-                      #{String(r.id).padStart(3, '0')}
+                    <Link to={`/requests/${r.id}`} className="block max-w-[12rem] truncate font-medium hover:underline" title={r.name ?? undefined}>
+                      {r.name || `#${String(r.id).padStart(3, '0')}`}
                     </Link>
+                    {r.name && <span className="font-mono text-[10px] text-muted-foreground">#{String(r.id).padStart(3, '0')}</span>}
                   </td>
                   {admin && <td className="max-w-[12rem] truncate px-3.5 py-3 text-muted-foreground" title={r.user_email}>{r.user_email}</td>}
                   <td className="px-3.5 py-3 font-medium">{label(r.preset)}</td>
@@ -133,13 +134,13 @@ export function RequestsTable({ rows, presets, admin, busyId, onTerminate, onDel
       <div className="space-y-2.5 md:hidden">
         {rows.map((r) => (
           <div key={r.id} className="rounded-xl border border-border bg-card p-4">
-            <div className="flex items-center justify-between">
-              <Link to={`/requests/${r.id}`} className="font-mono text-xs text-muted-foreground">
-                #{String(r.id).padStart(3, '0')}
+            <div className="flex items-center justify-between gap-2">
+              <Link to={`/requests/${r.id}`} className="truncate font-medium hover:underline">
+                {r.name || `#${String(r.id).padStart(3, '0')}`}
               </Link>
               <StatusBadge status={eff(r)} />
             </div>
-            <div className="mt-2 font-medium">{label(r.preset)}</div>
+            <div className="mt-2 text-sm text-muted-foreground">{label(r.preset)}</div>
             {admin && <div className="text-xs text-muted-foreground">{r.user_email}</div>}
             <div className="mt-1 line-clamp-2 text-sm text-muted-foreground">{r.purpose}</div>
             <div className="mt-1 text-xs text-muted-foreground">{t('table.expires')} : {fmtDate(r.end_date)}</div>

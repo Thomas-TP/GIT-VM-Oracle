@@ -257,8 +257,11 @@ export function VmConsole({ rows, loading, catalog }: { rows: VmRequest[]; loadi
                           <span className="flex items-center gap-2.5">
                             {fam && <OsIcon family={fam} className="h-6 w-6" />}
                             <span className="min-w-0">
-                              <Link to={`/requests/${r.id}`} className="font-mono text-xs text-muted-foreground hover:text-foreground">#{String(r.id).padStart(3, '0')}</Link>
-                              {r.group_name && <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{r.group_name}</span>}
+                              <Link to={`/requests/${r.id}`} className="block truncate font-medium hover:underline">{r.name || `#${String(r.id).padStart(3, '0')}`}</Link>
+                              <span className="flex items-center gap-1.5">
+                                <span className="font-mono text-[10px] text-muted-foreground">#{String(r.id).padStart(3, '0')}</span>
+                                {r.group_name && <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">{r.group_name}</span>}
+                              </span>
                             </span>
                           </span>
                         </td>
