@@ -1,0 +1,25 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "schemaVersion": 39,
+  "title": "GIT VM — Logs / Audit",
+  "uid": "gitvm-logs",
+  "tags": ["git-vm-portal", "logs"],
+  "time": { "from": "now-7d", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      { "name": "portal", "label": "Portal URL", "type": "textbox", "query": "https://git-vm-portal.thomas-prudhomme.workers.dev", "current": { "text": "https://git-vm-portal.thomas-prudhomme.workers.dev", "value": "https://git-vm-portal.thomas-prudhomme.workers.dev" } },
+      { "name": "token", "label": "Token", "type": "textbox", "query": "", "current": { "text": "", "value": "" } }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "title": "Journal d'audit (200 dernières actions)", "type": "table", "gridPos": { "h": 20, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "gitvm-infinity" },
+      "fieldConfig": { "defaults": { "custom": { "filterable": true } }, "overrides": [] },
+      "options": { "showHeader": true, "sortBy": [ { "displayName": "created_at", "desc": true } ] },
+      "targets": [ { "refId": "A", "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "gitvm-infinity" }, "type": "json", "source": "url", "format": "table", "url": "${portal}/api/monitoring/audit?token=${token}", "url_options": { "method": "GET" }, "columns": [ { "selector": "created_at", "text": "Quand", "type": "string" }, { "selector": "action", "text": "Action", "type": "string" }, { "selector": "actor", "text": "Acteur", "type": "string" }, { "selector": "target", "text": "Cible", "type": "string" }, { "selector": "detail", "text": "Détail", "type": "string" } ] } ]
+    }
+  ]
+}
