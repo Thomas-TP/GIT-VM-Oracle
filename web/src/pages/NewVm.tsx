@@ -260,7 +260,6 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
 
   const [vms, setVms] = useState<VmCfg[]>([makeDefault()]);
   const [active, setActive] = useState(0);
-  const [groupEnabled, setGroupEnabled] = useState(false);
   const [groupName, setGroupName] = useState('');
   const [purpose, setPurpose] = useState('');
   const [showSubmit, setShowSubmit] = useState(false);
@@ -294,13 +293,14 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
     return p && s ? p.hourlyUsd * 730 + s.sizeGb * catalog.storageUsdGbMonth : 0;
   };
   const totalMonthly = useMemo(() => vms.reduce((a, v) => a + monthlyOf(v), 0), [vms]);
-  const allValid = vms.every(validVm) && (!groupEnabled || groupName.trim().length > 0);
+  const allValid = vms.every(validVm);
+  const needsGroup = count > 1;
 
   const m = useMutation({
     mutationFn: () =>
       api.createBatch(
         vms.map((v) => ({ perf: v.perf, storage: v.storage, os: v.os, purpose: purpose.trim(), startDate: v.start ? new Date(v.start).toISOString() : null, endDate: new Date(v.end).toISOString(), course: v.course, snapshotId: v.snapshotId ? Number(v.snapshotId) : null })),
-        groupEnabled && groupName.trim() ? { name: groupName.trim() } : undefined
+        needsGroup ? { name: groupName.trim() } : undefined
       ),
     onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: ['requests'] });
@@ -371,16 +371,9 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
           <VmConfig vm={vms[active]} onChange={updateActive} catalog={catalog} snapshots={completedSnaps} />
 
           {count > 1 && (
-            <Card className="p-4">
-              <label className="flex items-center gap-2.5">
-                <input type="checkbox" checked={groupEnabled} onChange={(e) => setGroupEnabled(e.target.checked)} className="h-4 w-4 rounded border-border" />
-                <span className="text-sm font-medium">{t('newvm.groupEnable')}</span>
-              </label>
-              {groupEnabled && (
-                <Input className="mt-3" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder={t('newvm.groupNamePlaceholder')} />
-              )}
-              <p className="mt-2 text-xs text-muted-foreground">{t('newvm.groupHint')}</p>
-            </Card>
+            <p className="rounded-lg border border-border bg-muted/30 px-3.5 py-2.5 text-xs text-muted-foreground">
+              {t('newvm.groupForced')}
+            </p>
           )}
         </div>
 
@@ -425,14 +418,25 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
         footer={
           <>
             <Button variant="secondary" onClick={() => setShowSubmit(false)} disabled={m.isPending}>{t('common.cancel')}</Button>
-            <Button onClick={() => m.mutate()} disabled={!purpose.trim() || m.isPending}>
+            <Button onClick={() => m.mutate()} disabled={!purpose.trim() || (needsGroup && !groupName.trim()) || m.isPending}>
               {m.isPending ? <Spinner className="h-4 w-4" /> : null}
               {m.isPending ? t('newvm.submitting') : t('newvm.submitN', { count })}
             </Button>
           </>
         }
       >
-        <Textarea rows={3} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder={t('newvm.purposePlaceholder')} />
+        <div className="space-y-4">
+          {needsGroup && (
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('newvm.groupNameLabel')}</span>
+              <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder={t('newvm.groupNamePlaceholder')} autoFocus />
+            </label>
+          )}
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('newvm.justifyLabel')}</span>
+            <Textarea rows={3} value={purpose} onChange={(e) => setPurpose(e.target.value)} placeholder={t('newvm.purposePlaceholder')} />
+          </label>
+        </div>
       </Modal>
     </div>
   );

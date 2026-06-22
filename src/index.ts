@@ -385,7 +385,9 @@ app.post('/api/requests/batch', apiAuth, async (c) => {
   if ((await countRecentRequests(c.env, user.email, 60)) + parsed.length > 10) {
     return c.json({ error: 'rate_limited' }, 429, { 'Retry-After': '3600' });
   }
-  const groupName = body.group && String(body.group.name ?? '').trim() ? String(body.group.name).trim().slice(0, 80) : null;
+  // Multi-VM batches are always grouped (fallback name if the client omitted one).
+  const groupNameRaw = body.group && String(body.group.name ?? '').trim() ? String(body.group.name).trim().slice(0, 80) : null;
+  const groupName = groupNameRaw ?? (parsed.length > 1 ? 'Groupe' : null);
   const groupId = groupName ? randomToken(8) : null;
   const ids: number[] = [];
   for (const p of parsed) {
