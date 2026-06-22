@@ -4,10 +4,11 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from '../api';
 import { useToast } from '../toast';
-import type { OsPreset, PresetCatalog } from '../types';
-import { Button, Card, IconBack, IconCheck, Input, Modal, Spinner, Textarea } from '../ui';
+import type { OsPreset, PresetCatalog, Snapshot } from '../types';
+import { Button, Card, IconBack, IconCheck, Input, Modal, Select, Spinner, Textarea } from '../ui';
 import { OsIcon } from '../components/OsIcon';
 import { DatePicker } from '../components/DatePicker';
+import { fmtDate } from '../lib/format';
 
 const pad = (n: number) => String(n).padStart(2, '0');
 const toLocalInput = (d: Date) =>
@@ -29,6 +30,7 @@ interface VmCfg {
   course: string;
   start: string;
   end: string;
+  snapshotId: string;
 }
 
 function Section({ n, title, hint, children }: { n: number; title: string; hint: string; children: React.ReactNode }) {
@@ -72,7 +74,7 @@ function Badge({ children, tone = 'muted' }: { children: React.ReactNode; tone?:
 }
 
 /* ---- per-VM configuration form ---- */
-function VmConfig({ vm, onChange, catalog }: { vm: VmCfg; onChange: (patch: Partial<VmCfg>) => void; catalog: PresetCatalog }) {
+function VmConfig({ vm, onChange, catalog, snapshots }: { vm: VmCfg; onChange: (patch: Partial<VmCfg>) => void; catalog: PresetCatalog; snapshots: Snapshot[] }) {
   const { t } = useTranslation();
   const perfList = catalog.perf.filter((p) => !p.hidden);
   const storageList = catalog.storage.filter((s) => !s.hidden);
@@ -88,6 +90,25 @@ function VmConfig({ vm, onChange, catalog }: { vm: VmCfg; onChange: (patch: Part
 
   return (
     <div className="space-y-8">
+      {snapshots.length > 0 && (
+        <div className="rounded-xl border border-border bg-muted/30 p-3.5">
+          <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('newvm.restore')}</span>
+          <Select
+            value={vm.snapshotId}
+            onChange={(e) => {
+              const sid = e.target.value;
+              const snap = snapshots.find((s) => String(s.id) === sid);
+              onChange({ snapshotId: sid, ...(snap?.os ? { os: snap.os } : {}) });
+            }}
+          >
+            <option value="">{t('newvm.restoreNone')}</option>
+            {snapshots.map((s) => (
+              <option key={s.id} value={s.id}>#{s.id}{s.os ? ` · ${s.os}` : ''} · {fmtDate(s.created_at)}</option>
+            ))}
+          </Select>
+          <p className="mt-1.5 text-xs text-muted-foreground">{t('newvm.restoreHint')}</p>
+        </div>
+      )}
       <Section n={1} title={t('newvm.perf')} hint={t('newvm.perfHint')}>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {perfList.map((p) => (
@@ -231,7 +252,11 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
     course: '',
     start: toLocalInput(new Date()),
     end: toLocalInput(new Date(Date.now() + 7 * DAY)),
+    snapshotId: '',
   });
+
+  const snapshotsQ = useQuery({ queryKey: ['user-snapshots'], queryFn: api.userSnapshots });
+  const completedSnaps = useMemo(() => (snapshotsQ.data ?? []).filter((s) => s.status === 'completed'), [snapshotsQ.data]);
 
   const [vms, setVms] = useState<VmCfg[]>([makeDefault()]);
   const [active, setActive] = useState(0);
@@ -274,7 +299,7 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
   const m = useMutation({
     mutationFn: () =>
       api.createBatch(
-        vms.map((v) => ({ perf: v.perf, storage: v.storage, os: v.os, purpose: purpose.trim(), startDate: v.start ? new Date(v.start).toISOString() : null, endDate: new Date(v.end).toISOString(), course: v.course })),
+        vms.map((v) => ({ perf: v.perf, storage: v.storage, os: v.os, purpose: purpose.trim(), startDate: v.start ? new Date(v.start).toISOString() : null, endDate: new Date(v.end).toISOString(), course: v.course, snapshotId: v.snapshotId ? Number(v.snapshotId) : null })),
         groupEnabled && groupName.trim() ? { name: groupName.trim() } : undefined
       ),
     onSuccess: (res) => {
@@ -343,7 +368,7 @@ function NewVmForm({ catalog, nav, qc, toast }: { catalog: PresetCatalog; nav: R
             </div>
           )}
 
-          <VmConfig vm={vms[active]} onChange={updateActive} catalog={catalog} />
+          <VmConfig vm={vms[active]} onChange={updateActive} catalog={catalog} snapshots={completedSnaps} />
 
           {count > 1 && (
             <Card className="p-4">

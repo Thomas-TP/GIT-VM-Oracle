@@ -125,13 +125,14 @@ export async function createRequest(
   endDate: string,
   course: string | null = null,
   groupId: string | null = null,
-  groupName: string | null = null
+  groupName: string | null = null,
+  restoreSnapshotId: number | null = null
 ): Promise<number> {
   const res = await env.DB.prepare(
-    `INSERT INTO vm_requests (user_email, purpose, preset, storage, os, region, start_date, end_date, course, group_id, group_name)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`
+    `INSERT INTO vm_requests (user_email, purpose, preset, storage, os, region, start_date, end_date, course, group_id, group_name, restore_snapshot_id)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)`
   )
-    .bind(email, purpose, perf, storage, os, region, startDate, endDate, course, groupId, groupName)
+    .bind(email, purpose, perf, storage, os, region, startDate, endDate, course, groupId, groupName, restoreSnapshotId)
     .run();
   return res.meta.last_row_id as number;
 }
@@ -201,6 +202,7 @@ export interface SnapshotRow {
   status: string;
   ova_status: string | null;
   ova_url: string | null;
+  os: string | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -212,13 +214,14 @@ export async function createSnapshotRow(
   awsSnapshotId: string,
   description: string,
   rootDevice: string | null,
-  architecture: string | null
+  architecture: string | null,
+  os: string | null = null
 ): Promise<number> {
   const res = await env.DB.prepare(
-    `INSERT INTO snapshots (request_id, user_email, aws_snapshot_id, description, root_device, architecture)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6)`
+    `INSERT INTO snapshots (request_id, user_email, aws_snapshot_id, description, root_device, architecture, os)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)`
   )
-    .bind(requestId, owner, awsSnapshotId, description.slice(0, 255), rootDevice, architecture)
+    .bind(requestId, owner, awsSnapshotId, description.slice(0, 255), rootDevice, architecture, os)
     .run();
   return res.meta.last_row_id as number;
 }
