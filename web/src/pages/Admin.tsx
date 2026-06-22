@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '../api';
 import { useToast } from '../toast';
 import type { AuditEntry, Metrics, OsPreset, PerfPreset, PresetCatalog, Status, VmRequest } from '../types';
-import { Button, Card, IconCheck, IconDownload, IconPlay, IconReboot, IconStop, IconTrash, IconX, Modal, Select, Spinner, TableSkeleton, Textarea } from '../ui';
+import { Button, Card, IconDownload, IconPlay, IconReboot, IconStop, IconTrash, Select, Spinner, TableSkeleton } from '../ui';
 import { fmtDate } from '../lib/format';
 import { OsIcon } from '../components/OsIcon';
 import { RequestsTable } from '../components/RequestsTable';
+import { GroupReview } from '../components/GroupReview';
 import { UsersPanel } from '../components/UsersPanel';
 
 type Tab = 'overview' | 'requests' | 'machines' | 'users' | 'monitoring';
@@ -170,14 +171,7 @@ function RequestsSection({ rows, loading, catalog }: { rows: VmRequest[]; loadin
     return m;
   }, [catalog]);
 
-  const qc = useQueryClient();
-  const toast = useToast();
-  const [rejectGroupId, setRejectGroupId] = useState<string | null>(null);
-  const [groupNote, setGroupNote] = useState('');
-  const invalidateAdmin = () => { qc.invalidateQueries({ queryKey: ['admin-all'] }); qc.invalidateQueries({ queryKey: ['admin-stats'] }); };
-  const onErr = () => toast.error(t('toast.error'));
-  const gApproveM = useMutation({ mutationFn: (gid: string) => api.groupApprove(gid), onSuccess: () => { invalidateAdmin(); toast.success(t('toast.approved')); }, onError: onErr });
-  const gRejectM = useMutation({ mutationFn: (v: { gid: string; note: string }) => api.groupReject(v.gid, v.note), onSuccess: () => { invalidateAdmin(); setRejectGroupId(null); setGroupNote(''); toast.success(t('toast.rejected')); }, onError: onErr });
+  const osFamily = (id?: string | null) => (id ? catalog?.os.find((o) => o.id === id)?.family : undefined);
 
   const eff = (r: VmRequest): Status => (r.expired_at ? 'expired' : r.status);
   const display = useMemo(() => {
@@ -248,24 +242,7 @@ function RequestsSection({ rows, loading, catalog }: { rows: VmRequest[]; loadin
       {pendingGroups.length > 0 && (
         <div className="space-y-3">
           {pendingGroups.map(([gid, grp]) => (
-            <Card key={gid} className="overflow-hidden border-amber-500/30">
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border bg-amber-500/[0.06] px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{grp.name}</span>
-                  <span className="text-xs text-muted-foreground">· {t('admin.groupPending', { count: grp.pending })}</span>
-                </div>
-                <div className="flex gap-2">
-                  <Button disabled={gApproveM.isPending} onClick={() => gApproveM.mutate(gid)}>
-                    {gApproveM.isPending ? <Spinner className="h-4 w-4" /> : <IconCheck className="h-4 w-4" />}
-                    {t('admin.approveGroup')}
-                  </Button>
-                  <Button variant="danger" onClick={() => { setRejectGroupId(gid); setGroupNote(''); }}>
-                    <IconX className="h-4 w-4" /> {t('admin.rejectGroup')}
-                  </Button>
-                </div>
-              </div>
-              <div className="p-3"><RequestsTable rows={grp.rows} presets={presetMap} admin /></div>
-            </Card>
+            <GroupReview key={gid} groupId={gid} name={grp.name} owner={grp.rows[0]?.user_email} vms={grp.rows} presets={presetMap} osFamily={osFamily} />
           ))}
         </div>
       )}
@@ -285,25 +262,6 @@ function RequestsSection({ rows, loading, catalog }: { rows: VmRequest[]; loadin
           )}
         </>
       )}
-
-      <Modal
-        open={!!rejectGroupId}
-        onClose={() => setRejectGroupId(null)}
-        title={t('admin.rejectGroup')}
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setRejectGroupId(null)} disabled={gRejectM.isPending}>{t('common.cancel')}</Button>
-            <Button variant="danger" disabled={gRejectM.isPending} onClick={() => rejectGroupId && gRejectM.mutate({ gid: rejectGroupId, note: groupNote.trim() })}>
-              {gRejectM.isPending ? <Spinner className="h-4 w-4" /> : null}{t('actions.reject')}
-            </Button>
-          </>
-        }
-      >
-        <label className="block">
-          <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('admin.rejectReason')}</span>
-          <Textarea rows={2} value={groupNote} onChange={(e) => setGroupNote(e.target.value)} />
-        </label>
-      </Modal>
     </div>
   );
 }
