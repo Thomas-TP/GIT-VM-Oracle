@@ -49,6 +49,7 @@ export const api = {
   approveExtension: (id: number) => req<{ ok: true }>(`/api/admin/requests/${id}/extend/approve`, { method: 'POST' }),
   rejectExtension: (id: number) => req<{ ok: true }>(`/api/admin/requests/${id}/extend/reject`, { method: 'POST' }),
   terminate: (id: number) => req<{ ok: true }>(`/api/requests/${id}/terminate`, { method: 'POST' }),
+  reset: (id: number) => req<{ ok: true }>(`/api/requests/${id}/reset`, { method: 'POST' }),
   start: (id: number) => req<{ ok: true }>(`/api/requests/${id}/start`, { method: 'POST' }),
   stop: (id: number) => req<{ ok: true }>(`/api/requests/${id}/stop`, { method: 'POST' }),
   reboot: (id: number) => req<{ ok: true }>(`/api/requests/${id}/reboot`, { method: 'POST' }),

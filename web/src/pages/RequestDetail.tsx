@@ -58,6 +58,7 @@ export function RequestDetail() {
   const qc = useQueryClient();
   const toast = useToast();
   const [confirmTerm, setConfirmTerm] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const q = useQuery({
     queryKey: ['request', rid],
@@ -93,6 +94,7 @@ export function RequestDetail() {
   const startM = useMutation({ mutationFn: () => api.start(rid), onSuccess: () => { refresh(); toast.success(t('toast.started')); }, onError: onErr });
   const stopM = useMutation({ mutationFn: () => api.stop(rid), onSuccess: () => { refresh(); toast.success(t('toast.stopped')); }, onError: onErr });
   const rebootM = useMutation({ mutationFn: () => api.reboot(rid), onSuccess: () => { refresh(); toast.success(t('toast.rebooted')); }, onError: onErr });
+  const resetM = useMutation({ mutationFn: () => api.reset(rid), onSuccess: () => { refresh(); setConfirmReset(false); toast.success(t('toast.reset')); }, onError: onErr });
   const busy = startM.isPending || stopM.isPending || rebootM.isPending;
 
   if (q.isLoading)
@@ -172,6 +174,11 @@ export function RequestDetail() {
                 <IconReboot className="h-4 w-4" /> {t('actions.reboot')}
               </Button>
             </>
+          )}
+          {r.status === 'active' && !r.expired_at && (
+            <Button variant="secondary" disabled={busy} onClick={() => setConfirmReset(true)}>
+              <IconReboot className="h-4 w-4" /> {t('actions.reset')}
+            </Button>
           )}
           {canTerm && (
             <Button variant="danger" onClick={() => setConfirmTerm(true)}>
@@ -290,6 +297,24 @@ export function RequestDetail() {
       )}
 
       <Comments requestId={rid} />
+
+      <Modal
+        open={confirmReset}
+        onClose={() => setConfirmReset(false)}
+        title={t('confirm.resetTitle')}
+        description={t('confirm.resetBody')}
+        footer={
+          <>
+            <Button variant="secondary" onClick={() => setConfirmReset(false)} disabled={resetM.isPending}>
+              {t('common.cancel')}
+            </Button>
+            <Button variant="danger" onClick={() => resetM.mutate()} disabled={resetM.isPending}>
+              {resetM.isPending ? <Spinner className="h-4 w-4" /> : null}
+              {t('actions.reset')}
+            </Button>
+          </>
+        }
+      />
 
       <Modal
         open={confirmTerm}

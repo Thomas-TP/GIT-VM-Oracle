@@ -85,6 +85,7 @@ const fr = {
     start: 'Démarrer',
     stop: 'Arrêter',
     reboot: 'Redémarrer',
+    reset: 'Réinitialiser',
   },
   vmState: {
     running: 'En marche',
@@ -201,6 +202,8 @@ const fr = {
   confirm: {
     terminateTitle: 'Supprimer la VM ?',
     terminateBody: 'L’instance AWS sera définitivement terminée et la clé SSH supprimée. Action irréversible.',
+    resetTitle: 'Réinitialiser la VM ?',
+    resetBody: 'La VM est entièrement détruite puis recréée à neuf (mêmes configuration et outils). Toutes les données sont perdues. Aucune validation requise.',
     rejectTitle: 'Refuser la demande',
     rejectNote: 'Motif du refus (optionnel)',
     approveTitle: 'Approuver la demande',
@@ -216,6 +219,7 @@ const fr = {
     started: 'VM démarrée',
     stopped: 'VM arrêtée',
     rebooted: 'VM redémarrée',
+    reset: 'Réinitialisation lancée',
     roleUpdated: 'Rôle mis à jour',
     commentAdded: 'Commentaire ajouté',
     storageTooSmall: 'Stockage insuffisant pour ce système',
@@ -472,6 +476,7 @@ const en: typeof fr = {
     start: 'Start',
     stop: 'Stop',
     reboot: 'Reboot',
+    reset: 'Reset',
   },
   vmState: {
     running: 'Running',
@@ -588,6 +593,8 @@ const en: typeof fr = {
   confirm: {
     terminateTitle: 'Delete the VM?',
     terminateBody: 'The AWS instance will be permanently terminated and the SSH key deleted. This cannot be undone.',
+    resetTitle: 'Reset the VM?',
+    resetBody: 'The VM is fully destroyed and recreated from scratch (same config and tools). All data is lost. No approval required.',
     rejectTitle: 'Reject request',
     rejectNote: 'Reason for rejection (optional)',
     approveTitle: 'Approve request',
@@ -603,6 +610,7 @@ const en: typeof fr = {
     started: 'VM started',
     stopped: 'VM stopped',
     rebooted: 'VM rebooted',
+    reset: 'Reset started',
     roleUpdated: 'Role updated',
     commentAdded: 'Comment added',
     storageTooSmall: 'Disk too small for this OS',

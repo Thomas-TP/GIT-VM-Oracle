@@ -203,24 +203,11 @@ export function ConnectionGuide({
         <Info label={t('guide.keyName')} value={keyFile} mono />
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <a href={api.keyUrl(id)} className="inline-flex">
-          <Button variant="secondary">
-            <IconDownload className="h-4 w-4" /> {t('access.downloadKey')}
-          </Button>
-        </a>
-        <Button
-          variant="secondary"
-          onClick={() =>
-            downloadText(
-              `gitvm-${id}.sshconfig`,
-              `Host gitvm-${id}\n    HostName ${ip}\n    User ${user}\n    IdentityFile ~/.ssh/${keyFile}\n    StrictHostKeyChecking accept-new\n`
-            )
-          }
-        >
-          <IconDownload className="h-4 w-4" /> {t('guide.dlSshConfig')}
+      <a href={api.keyUrl(id)} className="inline-flex">
+        <Button variant="secondary">
+          <IconDownload className="h-4 w-4" /> {t('access.downloadKey')}
         </Button>
-      </div>
+      </a>
 
       <Tabs
         active={tab}

@@ -354,6 +354,16 @@ export async function getVmByRequest(env: Env, requestId: number) {
   return await env.DB.prepare(`SELECT * FROM vms WHERE request_id = ?1`).bind(requestId).first();
 }
 
+// Remove the VM row (used by reset before re-provisioning a fresh instance).
+export async function deleteVm(env: Env, requestId: number): Promise<void> {
+  await env.DB.prepare(`DELETE FROM vms WHERE request_id = ?1`).bind(requestId).run();
+}
+
+// Clear the course-ready marker (reset re-runs the course install).
+export async function clearCourseReady(env: Env, requestId: number): Promise<void> {
+  await env.DB.prepare(`UPDATE vm_requests SET course_ready_at = NULL WHERE id = ?1`).bind(requestId).run();
+}
+
 export interface ActiveVm {
   id: number;
   status: string;

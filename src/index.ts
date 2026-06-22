@@ -35,6 +35,8 @@ import {
   setRequestStatus,
   createVm,
   updateVm,
+  deleteVm,
+  clearCourseReady,
   getVmByRequest,
   getKeyForRequest,
   getPasswordForRequest,
@@ -482,6 +484,29 @@ app.post('/api/requests/:id/schedule/resume', apiAuth, async (c) => {
   await setSchedulePaused(c.env, id, false);
   await audit(c.env, user.email, 'schedule.resume', `req:${id}`);
   return c.json({ ok: true });
+});
+
+// Full reset: destroy the instance + key and re-provision a fresh one (same config).
+// No admin approval. DESTRUCTIVE — wipes all data on the VM.
+app.post('/api/requests/:id/reset', apiAuth, async (c) => {
+  const id = Number(c.req.param('id'));
+  const ctx = await authorizeVm(c, id);
+  if (!ctx) return c.json({ error: 'not_found' }, 404);
+  if (ctx.r.status !== 'active' || ctx.r.expired_at) return c.json({ error: 'not_resettable' }, 409);
+  try {
+    if (ctx.vm?.aws_instance_id) await terminateInstance(c.env, ctx.vm.aws_instance_id);
+    if (ctx.vm?.ssh_key_name) await deleteKeyPair(c.env, ctx.vm.ssh_key_name);
+    await deleteVm(c.env, id);
+    await clearCourseReady(c.env, id);
+    await setRequestStatus(c.env, id, 'provisioning');
+    const instanceId = await provisionRequest(c.env, ctx.r);
+    await audit(c.env, c.get('user').email, 'vm.reset', `req:${id}`, instanceId);
+    return c.json({ ok: true });
+  } catch (e: any) {
+    await setRequestStatus(c.env, id, 'failed', undefined, `reset: ${e.message}`);
+    await audit(c.env, c.get('user').email, 'vm.reset.failed', `req:${id}`, e.message);
+    return c.json({ error: e.message }, 500);
+  }
 });
 
 // Live AWS state (state + public IP + uptime) — used by the detail page.
