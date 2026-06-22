@@ -13,6 +13,7 @@ import {
   isValidOs,
   isValidCourse,
   buildCourseUserData,
+  buildWindowsCourseInstall,
   estimateMonthlyUsd,
   STORAGE_USD_GB_MONTH,
 } from './presets';
@@ -164,7 +165,14 @@ async function provisionRequest(env: Env, req: any): Promise<string> {
   if (isWindows) {
     const password = generateWindowsPassword();
     // EC2Launch v2 runs this on first boot; single-quoted so the password is literal.
-    userData = `<powershell>\nnet user Administrator '${password}'\n</powershell>\n<persist>false</persist>`;
+    const lines = [`net user Administrator '${password}'`];
+    const win = buildWindowsCourseInstall(req.course);
+    if (win) {
+      lines.push(win);
+      const token = await courseCallbackToken(env.SESSION_SECRET, req.id);
+      lines.push(`try { Invoke-WebRequest -UseBasicParsing -Method POST -Uri "${env.APP_URL}/api/internal/course-done?req=${req.id}&token=${encodeURIComponent(token)}" } catch {}`);
+    }
+    userData = `<powershell>\n${lines.join('\n')}\n</powershell>\n<persist>false</persist>`;
     encPassword = await encryptSecret(env.SESSION_SECRET, password);
   } else {
     // Linux: preinstall the chosen course's tools via cloud-init (if any). The
