@@ -60,6 +60,7 @@ import {
   createSnapshotRow,
   listSnapshotsForRequest,
   listSnapshotsForUser,
+  getSnapshot,
   updateSnapshotStatus,
   listPendingSnapshots,
   setSnapshotOnDelete,
@@ -89,6 +90,7 @@ import {
   describeRootVolume,
   createSnapshot,
   describeSnapshot,
+  registerImageFromSnapshot,
 } from './aws';
 import {
   notifyAdminsNewRequest,
@@ -175,21 +177,24 @@ async function provisionRequest(env: Env, req: any): Promise<string> {
   if (!perf || !os || !storage) throw new Error('invalid preset composition');
 
   const isWindows = os.connect === 'rdp';
+  const isRestore = !!req.restore_snapshot_id;
   let userData: string | undefined;
   let encPassword: string | null = null;
   if (isWindows) {
     const password = generateWindowsPassword();
     // EC2Launch v2 runs this on first boot; single-quoted so the password is literal.
     const lines = [`net user Administrator '${password}'`];
-    const win = buildWindowsCourseInstall(req.course);
-    if (win) {
-      lines.push(win);
-      const token = await courseCallbackToken(env.SESSION_SECRET, req.id);
-      lines.push(`try { Invoke-WebRequest -UseBasicParsing -Method POST -Uri "${env.APP_URL}/api/internal/course-done?req=${req.id}&token=${encodeURIComponent(token)}" } catch {}`);
+    if (!isRestore) {
+      const win = buildWindowsCourseInstall(req.course);
+      if (win) {
+        lines.push(win);
+        const token = await courseCallbackToken(env.SESSION_SECRET, req.id);
+        lines.push(`try { Invoke-WebRequest -UseBasicParsing -Method POST -Uri "${env.APP_URL}/api/internal/course-done?req=${req.id}&token=${encodeURIComponent(token)}" } catch {}`);
+      }
     }
     userData = `<powershell>\n${lines.join('\n')}\n</powershell>\n<persist>false</persist>`;
     encPassword = await encryptSecret(env.SESSION_SECRET, password);
-  } else {
+  } else if (!isRestore) {
     // Linux: preinstall the chosen course's tools via cloud-init (if any). The
     // script calls back when done so the UI can show "tools ready".
     const base = buildCourseUserData(req.course);
@@ -200,14 +205,24 @@ async function provisionRequest(env: Env, req: any): Promise<string> {
     }
   }
 
+  // Restore: register an AMI from the snapshot and launch from it (disk = snapshot).
+  let amiId = os.ami;
+  let sizeGb = storage.sizeGb;
+  if (isRestore) {
+    const snap = await getSnapshot(env, req.restore_snapshot_id, req.user_email);
+    if (!snap?.aws_snapshot_id || snap.status !== 'completed') throw new Error('snapshot not ready for restore');
+    amiId = await registerImageFromSnapshot(env, `gitvm-restore-${req.id}`, snap.aws_snapshot_id, snap.root_device ?? '/dev/sda1', snap.architecture ?? 'x86_64');
+    sizeGb = Math.max(storage.sizeGb, snap.size_gb ?? 0);
+  }
+
   const kp = await createKeyPair(env, req.id, isWindows ? 'rsa' : 'ed25519');
   const encKey = await encryptSecret(env.SESSION_SECRET, kp.privateKey);
   const { instanceId } = await launchInstance(env, {
     requestId: req.id,
     keyName: kp.keyName,
     instanceType: perf.instanceType,
-    amiId: os.ami,
-    sizeGb: storage.sizeGb,
+    amiId,
+    sizeGb,
     userData,
   });
   await createVm(env, req.id, instanceId, kp.keyName, encKey, os.sshUser, os.connect, encPassword);
@@ -219,9 +234,10 @@ async function autoSnapshot(env: Env, requestId: number, owner: string, instance
   try {
     const rv = await describeRootVolume(env, instanceId);
     if (!rv.volumeId) return;
+    const r = await getRequest(env, requestId);
     const desc = `auto req-${requestId} ${new Date().toISOString().slice(0, 16)}`;
     const snapId = await createSnapshot(env, rv.volumeId, desc);
-    await createSnapshotRow(env, requestId, owner, snapId, desc, rv.rootDevice ?? null, rv.architecture ?? null);
+    await createSnapshotRow(env, requestId, owner, snapId, desc, rv.rootDevice ?? null, rv.architecture ?? null, r?.os ?? null);
     await audit(env, 'system', 'snapshot.auto', `req:${requestId}`, snapId);
   } catch (e: any) {
     await audit(env, 'system', 'snapshot.auto.error', `req:${requestId}`, e.message);
@@ -351,7 +367,7 @@ app.post('/api/requests/batch', apiAuth, async (c) => {
   const vms = Array.isArray(body.vms) ? body.vms : [];
   if (vms.length < 1 || vms.length > 4) return c.json({ error: 'invalid_count' }, 400);
   const now = Date.now();
-  const parsed: { perf: string; storage: string; os: string; purpose: string; course: string; start: string | null; end: string }[] = [];
+  const parsed: { perf: string; storage: string; os: string; purpose: string; course: string; start: string | null; end: string; restoreSnapshotId: number | null }[] = [];
   for (const v of vms) {
     const perf = String(v.perf ?? ''), storage = String(v.storage ?? ''), os = String(v.os ?? '');
     const purpose = String(v.purpose ?? '').trim(), course = String(v.course ?? '');
@@ -363,7 +379,8 @@ app.post('/api/requests/batch', apiAuth, async (c) => {
     const start = v.startDate ? new Date(String(v.startDate)) : null;
     if (!end || isNaN(end.getTime()) || end.getTime() <= now) return c.json({ error: 'invalid_end_date' }, 400);
     if (start && (isNaN(start.getTime()) || start.getTime() >= end.getTime())) return c.json({ error: 'invalid_start_date' }, 400);
-    parsed.push({ perf, storage, os, purpose, course, start: start ? start.toISOString() : null, end: end.toISOString() });
+    const restoreSnapshotId = v.snapshotId && Number.isInteger(Number(v.snapshotId)) ? Number(v.snapshotId) : null;
+    parsed.push({ perf, storage, os, purpose, course, start: start ? start.toISOString() : null, end: end.toISOString(), restoreSnapshotId });
   }
   if ((await countRecentRequests(c.env, user.email, 60)) + parsed.length > 10) {
     return c.json({ error: 'rate_limited' }, 429, { 'Retry-After': '3600' });
@@ -373,7 +390,7 @@ app.post('/api/requests/batch', apiAuth, async (c) => {
   const ids: number[] = [];
   for (const p of parsed) {
     const id = await createRequest(
-      c.env, user.email, p.purpose, p.perf, p.storage, p.os, c.env.AWS_REGION, p.start, p.end, p.course || null, groupId, groupName
+      c.env, user.email, p.purpose, p.perf, p.storage, p.os, c.env.AWS_REGION, p.start, p.end, p.course || null, groupId, groupName, p.restoreSnapshotId
     );
     ids.push(id);
     await audit(c.env, user.email, 'request.create', `req:${id}`, `${p.perf}/${p.storage}/${p.os}${groupId ? ` grp:${groupId}` : ''}`);
@@ -708,7 +725,7 @@ app.post('/api/requests/:id/snapshot', apiAuth, async (c) => {
     if (!rv.volumeId) return c.json({ error: 'no_volume' }, 400);
     const desc = `req-${id} ${new Date().toISOString().slice(0, 16)}`;
     const snapId = await createSnapshot(c.env, rv.volumeId, desc);
-    const rowId = await createSnapshotRow(c.env, id, c.get('user').email, snapId, desc, rv.rootDevice ?? null, rv.architecture ?? null);
+    const rowId = await createSnapshotRow(c.env, id, c.get('user').email, snapId, desc, rv.rootDevice ?? null, rv.architecture ?? null, ctx.r.os ?? null);
     await audit(c.env, c.get('user').email, 'snapshot.create', `req:${id}`, snapId);
     return c.json({ ok: true, id: rowId, awsSnapshotId: snapId });
   } catch (e: any) {

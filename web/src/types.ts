@@ -108,6 +108,7 @@ export interface Snapshot {
   status: string;
   ova_status: string | null;
   ova_url: string | null;
+  os: string | null;
   created_at: string;
   completed_at: string | null;
 }
