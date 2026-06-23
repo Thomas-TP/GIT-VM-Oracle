@@ -1,0 +1,5 @@
+node_modules/
+*.pdf
+qa/
+t[0-9]*.js
+t[0-9]*.pptx
