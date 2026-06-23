@@ -226,6 +226,36 @@ export async function registerImageFromSnapshot(
   return id;
 }
 
+// Max CPUUtilization (%) over the last `minutes` from CloudWatch, plus the datapoint
+// count (so the caller can require enough history before acting). null = no data.
+export async function maxCpuOverWindow(env: Env, instanceId: string, minutes: number): Promise<{ max: number; datapoints: number } | null> {
+  const cw = new AwsClient({ accessKeyId: env.AWS_ACCESS_KEY_ID, secretAccessKey: env.AWS_SECRET_ACCESS_KEY, region: env.AWS_REGION, service: 'monitoring' });
+  const end = new Date();
+  const start = new Date(end.getTime() - minutes * 60_000);
+  const body = new URLSearchParams({
+    Action: 'GetMetricStatistics',
+    Version: '2010-08-01',
+    Namespace: 'AWS/EC2',
+    MetricName: 'CPUUtilization',
+    'Dimensions.member.1.Name': 'InstanceId',
+    'Dimensions.member.1.Value': instanceId,
+    StartTime: start.toISOString(),
+    EndTime: end.toISOString(),
+    Period: '300',
+    'Statistics.member.1': 'Maximum',
+  }).toString();
+  const res = await cw.fetch(`https://monitoring.${env.AWS_REGION}.amazonaws.com/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  });
+  const xml = await res.text();
+  if (!res.ok) throw new Error(`CloudWatch: ${xml.match(/<Message>([^<]+)<\/Message>/)?.[1] ?? res.status}`);
+  const vals = [...xml.matchAll(/<Maximum>([\d.eE+-]+)<\/Maximum>/g)].map((m) => parseFloat(m[1])).filter((n) => !isNaN(n));
+  if (!vals.length) return null;
+  return { max: Math.max(...vals), datapoints: vals.length };
+}
+
 // List instances managed by the portal -> { instanceId: state } (for reconciliation).
 export async function listManagedInstances(env: Env): Promise<Record<string, string>> {
   const xml = await ec2(env, {

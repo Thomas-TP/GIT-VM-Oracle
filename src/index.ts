@@ -42,6 +42,7 @@ import {
   getKeyForRequest,
   getPasswordForRequest,
   listActiveVms,
+  listRunningVmsForIdle,
   listScheduledVms,
   setSchedule,
   setSchedulePaused,
@@ -94,6 +95,7 @@ import {
   describeSnapshot,
   deleteSnapshot,
   registerImageFromSnapshot,
+  maxCpuOverWindow,
 } from './aws';
 import {
   notifyAdminsNewRequest,
@@ -227,7 +229,7 @@ async function provisionRequest(env: Env, req: any): Promise<string> {
     amiId,
     sizeGb,
     userData,
-    nameTag: req.name ?? null,
+    nameTag: req.name ? `${req.name}.${req.user_email.split('@')[0]}` : null,
   });
   await createVm(env, req.id, instanceId, kp.keyName, encKey, os.sshUser, os.connect, encPassword);
   return instanceId;
@@ -1151,6 +1153,29 @@ async function scheduledStop(env: Env): Promise<void> {
   }
 }
 
+// Auto-stop VMs idle (low CPU) for IDLE_STOP_HOURS. Best-effort; needs CloudWatch read.
+// The user can restart from the portal at any time.
+async function enforceIdleStop(env: Env): Promise<void> {
+  if (env.IDLE_STOP !== 'true') return;
+  const hours = Number(env.IDLE_STOP_HOURS) > 0 ? Number(env.IDLE_STOP_HOURS) : 3;
+  const minPoints = Math.floor(((hours * 60) / 5) * 0.7); // require ~enough history (running most of the window)
+  for (const vm of await listRunningVmsForIdle(env)) {
+    if (!vm.aws_instance_id) continue;
+    try {
+      const cpu = await maxCpuOverWindow(env, vm.aws_instance_id, hours * 60);
+      if (!cpu || cpu.datapoints < minPoints) continue; // not enough history yet
+      if (cpu.max < 10) {
+        await stopInstance(env, vm.aws_instance_id);
+        await updateVm(env, vm.id, 'stopping');
+        await addNotification(env, vm.user_email, 'idle_stopped', `/requests/${vm.id}`);
+        await audit(env, 'system', 'vm.idle_stop', `req:${vm.id}`, `cpuMax=${cpu.max.toFixed(1)}%`);
+      }
+    } catch {
+      /* skip this tick (e.g. CloudWatch permission missing) */
+    }
+  }
+}
+
 // Auto-retry provisioning for failed requests that never got an instance (max 3).
 async function retryFailed(env: Env): Promise<void> {
   const failed = await listRequestsByStatus(env, 'failed');
@@ -1231,6 +1256,7 @@ export default {
           await applySchedules(env);
           await retryFailed(env);
           await enforceExpiry(env);
+          await enforceIdleStop(env);
           await syncSnapshots(env);
         })()
       );

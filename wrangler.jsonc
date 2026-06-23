@@ -41,6 +41,8 @@
     "GRAFANA_URL": "https://thomastp.grafana.net/d/gitvm-portal/git-vm-portal",
     "MAIL_ENABLED": "true",
     "SCHEDULED_STOP": "true",
+    "IDLE_STOP": "true",
+    "IDLE_STOP_HOURS": "3",
     "SENTRY_DSN": "",
     "EMAILJS_PUBLIC_KEY": "KlKcUV9eCQouP22hT",
     "EMAILJS_SERVICE_ID": "service_aeuc86a",

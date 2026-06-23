@@ -542,6 +542,17 @@ export async function listActiveVms(env: Env): Promise<ActiveVm[]> {
   return res.results ?? [];
 }
 
+// Running active VMs (for the idle auto-stop check).
+export interface IdleVm { id: number; user_email: string; aws_instance_id: string | null; }
+export async function listRunningVmsForIdle(env: Env): Promise<IdleVm[]> {
+  const res = await env.DB.prepare(
+    `SELECT r.id, r.user_email, v.aws_instance_id
+       FROM vm_requests r JOIN vms v ON v.request_id = r.id
+      WHERE r.status = 'active' AND r.expired_at IS NULL AND v.state = 'running' AND v.aws_instance_id IS NOT NULL`
+  ).all<IdleVm>();
+  return res.results ?? [];
+}
+
 export interface ScheduledVm {
   id: number;
   user_email: string;
