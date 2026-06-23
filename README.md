@@ -16,21 +16,24 @@ Le tout sur **Cloudflare Workers**.
 ## ✨ Fonctionnalités
 
 - 🔐 **SSO Microsoft Entra ID** (OIDC authorization-code, in-Worker, aucun mot de passe stocké).
-- 🖥️ **Demande de VM en libre-service** depuis un catalogue : **performance × stockage × OS**.
+- 🖥️ **Demande de VM en libre-service** depuis un catalogue **performance × stockage × OS** ;
+  **1 à 4 VM** d'un coup, chacune **nommée** et configurée ; >1 VM ⇒ **groupe** (piloté ensemble).
 - 🐧 **7 systèmes** : Ubuntu 24.04, Debian 12, Amazon Linux 2023, Rocky Linux 9, AlmaLinux 9,
   **Windows Server 2022** et **Windows poste de travail** (bureau).
-- ✅ **Workflow de validation** (admin approuve/refuse) avec **notifications email**.
+- 👥 **3 rôles** : membre · **formateur** (page « Demande groupée » : 1–30 VM attribuées à des
+  utilisateurs) · admin.
+- ✅ **Workflow de validation** (admin approuve/refuse, à la VM ou au groupe) + **notifications**.
 - ⚙️ **Provisioning AWS EC2 automatique** et idempotent via un **réconciliateur** cron.
-- 🔑 **Accès sécurisé par VM** : clé SSH **ed25519 unique chiffrée AES-GCM** (Linux) ou **mot de
-  passe RDP** généré et chiffré (Windows) — accessible au seul propriétaire.
-- 📖 **Guides de connexion intégrés** : MobaXterm, Termius (SSH) et Bureau à distance (RDP).
-- ⏱️ **Cycle de vie** : dates début/fin obligatoires (sélecteur calendrier), **suppression
-  automatique à l'échéance** (ADR 0008), extinction nocturne (garde-fou coûts),
-  démarrage/arrêt/reboot à la demande.
-- 🕒 **Planification auto** : **démarrage / extinction programmés par l'utilisateur** (jours +
-  horaires, heure de Genève) — la VM s'allume et s'éteint toute seule.
-- 📊 **Console admin** : stats, métriques, recherche/tri/pagination, gestion des rôles, export CSV.
-- 🌗 Thème clair/sombre · 🌐 FR/EN · 🧾 **journal d'audit** sur les actions sensibles.
+- 🔑 **Accès sécurisé par VM** : clé SSH **ed25519 chiffrée AES-GCM** (Linux) ou **mot de passe RDP**
+  chiffré (Windows) — propriétaire uniquement. Guides intégrés (MobaXterm, Termius, Bureau à distance).
+- 💾 **Snapshots EBS** : créer / supprimer, **snapshot auto avant suppression**, **restaurer** une VM
+  depuis un snapshot à la création.
+- ⏱️ **Cycle de vie** : dates obligatoires, **suppression auto à l'échéance**, **arrêt sur
+  inactivité** (CPU CloudWatch), extinction nocturne, **planification** start/stop par VM.
+- 🛡️ **Durcissement sécurité** : DNS filtré (Cloudflare for Families), blocage P2P/torrent, hostname
+  verrouillé, **+ egress du Security Group verrouillé** (filtrage réseau non contournable).
+- 📊 **Console admin unifiée** (demandes + machines), **monitoring Grafana**, export CSV, **audit**.
+- 🌗 Thème clair/sombre · 🌐 FR/EN.
 
 ## 🧱 Stack
 
@@ -105,8 +108,8 @@ Config publique dans `wrangler.jsonc` (`vars`). Secrets via `wrangler secret put
 
 | Document | Contenu |
 |---|---|
-| [AGENTS.md](AGENTS.md) | Point d'entrée IA & onboarding — l'essentiel pour travailler ici |
-| [CLAUDE.md](CLAUDE.md) | Contexte projet détaillé, échéances, priorités |
+| [AGENTS.md](AGENTS.md) | **Référence canonique** — IA & onboarding : stack, archi, données, sécurité, déploiement |
+| [CLAUDE.md](CLAUDE.md) | Redirige vers AGENTS.md |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, flux, modèle de données, sécurité |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Pipeline CI/CD, publication, rollback |
 | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) | Variables, secrets, IAM AWS, Entra, EmailJS, rotation |
