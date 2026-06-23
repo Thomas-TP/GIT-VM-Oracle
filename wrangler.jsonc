@@ -36,8 +36,6 @@
     "AWS_SUBNET_ID": "subnet-0247cdf408e6fb4d1",
     "AWS_SECURITY_GROUP_ID": "sg-0f842f10ca3c7b2d1",
     "AWS_KEY_NAME": "",
-    "AWS_EXPORT_BUCKET": "gitvm-exports-437659978697",
-    "AWS_EXPORT_PROFILE": "gitvm-export-helper",
 
     "APP_URL": "https://git-vm-portal.thomas-prudhomme.workers.dev",
     "GRAFANA_URL": "https://thomastp.grafana.net/d/gitvm-portal/git-vm-portal",

@@ -111,14 +111,6 @@ export interface Snapshot {
   os: string | null;
   created_at: string;
   completed_at: string | null;
-  exports?: SnapshotExport[];
-}
-
-export type ExportTarget = 'vmware' | 'virtualbox';
-export interface SnapshotExport {
-  target: string; // vmware | virtualbox
-  status: string; // running | ready | error
-  url: string | null;
 }
 
 export interface VmRequest {

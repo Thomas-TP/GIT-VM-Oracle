@@ -64,11 +64,8 @@ import {
   updateSnapshotStatus,
   listPendingSnapshots,
   setSnapshotOnDelete,
-  createExport,
-  getRunningExport,
-  listExportsForRequest,
-  setExportStatus,
-  listRunningExports,
+  deleteSnapshotRow,
+  deleteSnapshotRowsForRequest,
   listUsers,
   setUserRole,
   addComment,
@@ -95,11 +92,8 @@ import {
   describeRootVolume,
   createSnapshot,
   describeSnapshot,
+  deleteSnapshot,
   registerImageFromSnapshot,
-  runExportHelper,
-  s3ObjectExists,
-  s3PresignGet,
-  listExportHelpers,
 } from './aws';
 import {
   notifyAdminsNewRequest,
@@ -417,9 +411,13 @@ app.post('/api/requests/batch', apiAuth, async (c) => {
 app.delete('/api/requests/:id', apiAuth, async (c) => {
   const user = c.get('user');
   const id = Number(c.req.param('id'));
+  // Capture snapshots before the row is gone, then cascade-delete them (AWS + DB).
+  const snaps = await listSnapshotsForRequest(c.env, id);
   const ok = await deleteRequest(c.env, user.email, id);
   if (!ok) return c.json({ error: 'not_deletable' }, 409);
-  await audit(c.env, user.email, 'request.delete', `req:${id}`);
+  for (const s of snaps) if (s.aws_snapshot_id) await deleteSnapshot(c.env, s.aws_snapshot_id).catch(() => {});
+  await deleteSnapshotRowsForRequest(c.env, id);
+  await audit(c.env, user.email, 'request.delete', `req:${id}`, snaps.length ? `+${snaps.length} snap` : '');
   return c.json({ ok: true });
 });
 
@@ -750,13 +748,7 @@ app.get('/api/requests/:id/snapshots', apiAuth, async (c) => {
   const id = Number(c.req.param('id'));
   const ctx = await authorizeVm(c, id);
   if (!ctx) return c.json({ error: 'not_found' }, 404);
-  const snaps = await listSnapshotsForRequest(c.env, id);
-  const exps = await listExportsForRequest(c.env, id);
-  const withExports = snaps.map((s) => ({
-    ...s,
-    exports: exps.filter((e) => e.snapshot_id === s.id).map((e) => ({ target: e.target, status: e.status, url: e.url })),
-  }));
-  return c.json({ snapshots: withExports });
+  return c.json({ snapshots: await listSnapshotsForRequest(c.env, id) });
 });
 
 app.get('/api/snapshots', apiAuth, async (c) => {
@@ -775,36 +767,19 @@ app.post('/api/requests/:id/snapshot-on-delete', apiAuth, async (c) => {
   return c.json({ ok: true });
 });
 
-// One-click: generate a downloadable VMware/VirtualBox bundle (config + disk) from a snapshot.
-app.post('/api/requests/:id/snapshots/:sid/export', apiAuth, async (c) => {
+// Delete one snapshot (AWS EBS snapshot + DB row).
+app.delete('/api/requests/:id/snapshots/:sid', apiAuth, async (c) => {
   const user = c.get('user');
   const id = Number(c.req.param('id'));
   const sid = Number(c.req.param('sid'));
   const ctx = await authorizeVm(c, id);
   if (!ctx) return c.json({ error: 'not_found' }, 404);
-  if (!c.env.AWS_EXPORT_BUCKET || !c.env.AWS_EXPORT_PROFILE) return c.json({ error: 'export_not_configured' }, 501);
   const snap = await getSnapshot(c.env, sid, ctx.r.user_email);
-  if (!snap || !snap.aws_snapshot_id || snap.status !== 'completed') return c.json({ error: 'snapshot_not_ready' }, 409);
-  const targetRaw = String((await c.req.json().catch(() => ({}))).target ?? 'vmware').toLowerCase();
-  const target = targetRaw === 'virtualbox' ? 'virtualbox' : 'vmware';
-  if (await getRunningExport(c.env, sid, target)) return c.json({ error: 'export_in_progress' }, 409);
-  const bucket = c.env.AWS_EXPORT_BUCKET;
-  const key = `exports/req${id}-snap${sid}-${target}-${Date.now()}.zip`;
-  const sizeGb = snap.size_gb ?? 30;
-  const osDef = ctx.r.os ? OS[ctx.r.os] : undefined;
-  const userData = exportUserData({
-    region: c.env.AWS_REGION, snapshotId: snap.aws_snapshot_id, bucket, key, target,
-    name: `gitvm-${id}`, guest: guestType(ctx.r.os),
-    loginUser: osDef?.sshUser ?? 'ubuntu', windows: osDef?.family === 'windows',
-  });
-  try {
-    const instanceId = await runExportHelper(c.env, { snapshotId: snap.aws_snapshot_id, profileName: c.env.AWS_EXPORT_PROFILE, userData, rootSizeGb: sizeGb * 2 + 18 });
-    await createExport(c.env, sid, ctx.r.user_email, target, key, instanceId);
-    await audit(c.env, user.email, 'snapshot.export.start', `snap:${sid}`, `${target} ${instanceId}`);
-    return c.json({ ok: true, status: 'running' });
-  } catch (e: any) {
-    return c.json({ error: e.message }, 500);
-  }
+  if (!snap) return c.json({ error: 'not_found' }, 404);
+  if (snap.aws_snapshot_id) await deleteSnapshot(c.env, snap.aws_snapshot_id).catch(() => {});
+  await deleteSnapshotRow(c.env, sid);
+  await audit(c.env, user.email, 'snapshot.delete', `snap:${sid}`, snap.aws_snapshot_id ?? '');
+  return c.json({ ok: true });
 });
 
 // Live AWS state (state + public IP + uptime) — used by the detail page.
@@ -1239,119 +1214,6 @@ async function syncSnapshots(env: Env): Promise<void> {
   }
 }
 
-// Poll running exports: when the helper has uploaded the bundle, presign it.
-// Reap any helper instance that overran (cost guard) and fail its export.
-async function syncExports(env: Env): Promise<void> {
-  if (!env.AWS_EXPORT_BUCKET) return;
-  const TIMEOUT = 45 * 60 * 1000;
-  for (const e of await listRunningExports(env)) {
-    try {
-      if (e.s3_key && (await s3ObjectExists(env, env.AWS_EXPORT_BUCKET, e.s3_key))) {
-        const url = await s3PresignGet(env, env.AWS_EXPORT_BUCKET, e.s3_key);
-        await setExportStatus(env, e.id, 'ready', url);
-        continue;
-      }
-      const started = e.started_at ? Date.parse(e.started_at + 'Z') : Date.now();
-      if (Date.now() - started > TIMEOUT) {
-        await setExportStatus(env, e.id, 'error');
-        if (e.instance_id) await terminateInstance(env, e.instance_id).catch(() => {});
-      }
-    } catch {
-      /* skip this tick */
-    }
-  }
-  // Belt-and-suspenders: kill any export helper running > 50 min, regardless of DB state.
-  try {
-    for (const h of await listExportHelpers(env)) {
-      if (Date.now() - Date.parse(h.launchTime) > 50 * 60 * 1000) await terminateInstance(env, h.id).catch(() => {});
-    }
-  } catch {
-    /* skip */
-  }
-}
-
-// VMware guestOS / VirtualBox OSType identifiers per OS family.
-function guestType(osId: string | null | undefined): { vmware: string; vbox: string } {
-  const fam = osId ? OS[osId]?.family : undefined;
-  switch (fam) {
-    case 'ubuntu': return { vmware: 'ubuntu-64', vbox: 'Ubuntu_64' };
-    case 'debian': return { vmware: 'debian10-64', vbox: 'Debian_64' };
-    case 'windows': return { vmware: 'windows9-64', vbox: 'Windows10_64' };
-    case 'rocky':
-    case 'alma': return { vmware: 'centos-64', vbox: 'RedHat_64' };
-    default: return { vmware: 'otherlinux-64', vbox: 'Linux_64' };
-  }
-}
-
-// Bootstrap for the throwaway converter (Amazon Linux 2023): snapshot -> disk -> descriptor -> zip -> S3.
-function exportUserData(p: { region: string; snapshotId: string; bucket: string; key: string; target: string; name: string; guest: { vmware: string; vbox: string }; loginUser: string; windows: boolean }): string {
-  const isVbox = p.target === 'virtualbox';
-  const fmt = isVbox ? 'vdi' : 'vmdk';
-  const disk = `${p.name}.${fmt}`;
-  const loginUser = (p.loginUser || 'ubuntu').replace(/[^a-zA-Z0-9_-]/g, '') || 'ubuntu';
-  const win = p.windows ? '1' : '0';
-  const py = isVbox
-    ? [
-        'import uuid',
-        `disk="${disk}"`,
-        "raw=open(disk,'rb').read(0x198)",
-        'u=str(uuid.UUID(bytes_le=raw[0x188:0x188+16]))',
-        'm=str(uuid.uuid4())',
-        `x='<?xml version="1.0"?>\\n<VirtualBox xmlns="http://www.virtualbox.org/" version="1.18-linux">\\n  <Machine uuid="{'+m+'}" name="${p.name}" OSType="${p.guest.vbox}" snapshotFolder="Snapshots">\\n    <MediaRegistry><HardDisks><HardDisk uuid="{'+u+'}" location="'+disk+'" format="VDI" type="Normal"/></HardDisks></MediaRegistry>\\n    <Hardware><CPU count="2"/><Memory RAMSize="2048"/></Hardware>\\n    <StorageControllers><StorageController name="SATA" type="AHCI" PortCount="1" useHostIOCache="false" Bootable="true"><AttachedDevice type="HardDisk" hotpluggable="false" port="0" device="0"><Image uuid="{'+u+'}"/></AttachedDevice></StorageController></StorageControllers>\\n  </Machine>\\n</VirtualBox>\\n'`,
-        `open("${p.name}.vbox","w").write(x)`,
-      ].join('\n')
-    : [
-        `disk="${disk}"`,
-        `x='.encoding = "UTF-8"\\nconfig.version = "8"\\nvirtualHW.version = "19"\\ndisplayName = "${p.name}"\\nguestOS = "${p.guest.vmware}"\\nmemsize = "2048"\\nnumvcpus = "2"\\nscsi0.present = "TRUE"\\nscsi0.virtualDev = "lsilogic"\\nscsi0:0.present = "TRUE"\\nscsi0:0.fileName = "'+disk+'"\\nethernet0.present = "TRUE"\\nethernet0.connectionType = "nat"\\n'`,
-        `open("${p.name}.vmx","w").write(x)`,
-      ].join('\n');
-  const desc = isVbox ? `${p.name}.vbox` : `${p.name}.vmx`;
-  return `#!/bin/bash
-exec > /var/log/gitvm-export.log 2>&1
-set -x
-REGION="${p.region}"
-SNAP="${p.snapshotId}"
-BUCKET="${p.bucket}"
-KEY="${p.key}"
-dnf install -y qemu-img zip python3 || true
-TOKEN=$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 600")
-md() { curl -s -H "X-aws-ec2-metadata-token: $TOKEN" "http://169.254.169.254/latest/meta-data/$1"; }
-IID=$(md instance-id)
-AZ=$(md placement/availability-zone)
-VOL=$(aws ec2 create-volume --region "$REGION" --snapshot-id "$SNAP" --availability-zone "$AZ" --volume-type gp3 --tag-specifications 'ResourceType=volume,Tags=[{Key=managed-by,Value=git-vm-portal-export}]' --query VolumeId --output text)
-aws ec2 wait volume-available --region "$REGION" --volume-ids "$VOL"
-aws ec2 attach-volume --region "$REGION" --volume-id "$VOL" --instance-id "$IID" --device /dev/sdf
-aws ec2 modify-instance-attribute --region "$REGION" --instance-id "$IID" --block-device-mappings '[{"DeviceName":"/dev/sdf","Ebs":{"DeleteOnTermination":true}}]' || true
-for i in $(seq 1 40); do DEV=$(lsblk -dpno NAME | grep -E 'nvme[1-9]n1$' | head -1); [ -n "$DEV" ] && break; sleep 3; done
-cd /root
-# Make the exported VM usable locally. AWS Linux images are SSH-key only (no console
-# password) -> set one so the user can log in; ship the credentials in login.txt.
-if [ "${win}" = "0" ]; then
-  ROOTP=$(lsblk -brpno NAME,FSTYPE,SIZE "$DEV" | awk '$2=="ext4"||$2=="xfs"{print $3, $1}' | sort -rn | head -1 | awk '{print $2}')
-  PW=$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)
-  mkdir -p /mnt/img
-  if [ -n "$ROOTP" ] && mount "$ROOTP" /mnt/img 2>/dev/null; then
-    echo "${loginUser}:$PW" | chroot /mnt/img chpasswd 2>/dev/null || true
-    echo "root:$PW" | chroot /mnt/img chpasswd 2>/dev/null || true
-    umount /mnt/img || true
-  fi
-  printf 'VM exportee depuis GIT VM Portal\\n\\nConnexion console:\\n  utilisateur: ${loginUser}\\n  mot de passe: %s\\n  (root: meme mot de passe)\\nA changer apres la premiere connexion.\\n' "$PW" > login.txt
-else
-  printf 'VM Windows exportee depuis GIT VM Portal\\n\\nConnexion: Administrateur\\nMot de passe: celui affiche dans le portail (page VM, onglet Connexion).\\n' > login.txt
-fi
-qemu-img convert -p -f raw -O ${fmt} "$DEV" "${disk}"
-python3 - <<'PYEOF'
-${py}
-PYEOF
-zip -j bundle.zip "${disk}" "${desc}" login.txt
-aws s3 cp bundle.zip "s3://$BUCKET/$KEY"
-aws ec2 detach-volume --region "$REGION" --volume-id "$VOL" || true
-sleep 8
-aws ec2 delete-volume --region "$REGION" --volume-id "$VOL" || true
-shutdown -h now
-`;
-}
-
 app.onError((err, c) => {
   reportError(c.env.SENTRY_DSN, err, c.executionCtx, { path: c.req.path });
   return c.json({ error: 'internal' }, 500);
@@ -1370,7 +1232,6 @@ export default {
           await retryFailed(env);
           await enforceExpiry(env);
           await syncSnapshots(env);
-          await syncExports(env);
         })()
       );
     }

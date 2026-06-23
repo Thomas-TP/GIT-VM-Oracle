@@ -267,44 +267,14 @@ export async function setSnapshotOnDelete(env: Env, owner: string, id: number, e
   await env.DB.prepare(`UPDATE vm_requests SET snapshot_on_delete = ?3 WHERE id = ?1 AND user_email = ?2`).bind(id, owner, enabled ? 1 : 0).run();
 }
 
-// ---- snapshot → local-disk export, per target (VMware / VirtualBox) ----
-export interface SnapshotExportRow {
-  id: number;
-  snapshot_id: number;
-  user_email: string;
-  target: string;
-  status: string;
-  s3_key: string | null;
-  url: string | null;
-  instance_id: string | null;
-  started_at: string;
+// Delete one snapshot row (owner-scoped at the route; AWS deletion done by the caller).
+export async function deleteSnapshotRow(env: Env, id: number): Promise<void> {
+  await env.DB.prepare(`DELETE FROM snapshots WHERE id = ?1`).bind(id).run();
 }
 
-export async function createExport(env: Env, snapshotId: number, owner: string, target: string, s3Key: string, instanceId: string): Promise<number> {
-  const res = await env.DB.prepare(
-    `INSERT INTO snapshot_exports (snapshot_id, user_email, target, status, s3_key, instance_id) VALUES (?1, ?2, ?3, 'running', ?4, ?5)`
-  ).bind(snapshotId, owner, target, s3Key, instanceId).run();
-  return res.meta.last_row_id as number;
-}
-
-export async function getRunningExport(env: Env, snapshotId: number, target: string): Promise<SnapshotExportRow | null> {
-  return await env.DB.prepare(`SELECT * FROM snapshot_exports WHERE snapshot_id = ?1 AND target = ?2 AND status = 'running'`).bind(snapshotId, target).first<SnapshotExportRow>();
-}
-
-export async function listExportsForRequest(env: Env, requestId: number): Promise<SnapshotExportRow[]> {
-  const res = await env.DB.prepare(
-    `SELECT e.* FROM snapshot_exports e JOIN snapshots s ON s.id = e.snapshot_id WHERE s.request_id = ?1`
-  ).bind(requestId).all<SnapshotExportRow>();
-  return res.results ?? [];
-}
-
-export async function setExportStatus(env: Env, id: number, status: 'ready' | 'error', url: string | null = null): Promise<void> {
-  await env.DB.prepare(`UPDATE snapshot_exports SET status = ?2, url = COALESCE(?3, url) WHERE id = ?1`).bind(id, status, url).run();
-}
-
-export async function listRunningExports(env: Env): Promise<SnapshotExportRow[]> {
-  const res = await env.DB.prepare(`SELECT * FROM snapshot_exports WHERE status = 'running'`).all<SnapshotExportRow>();
-  return res.results ?? [];
+// Remove all snapshot rows for a request (cascade when the VM is deleted from the list).
+export async function deleteSnapshotRowsForRequest(env: Env, requestId: number): Promise<void> {
+  await env.DB.prepare(`DELETE FROM snapshots WHERE request_id = ?1`).bind(requestId).run();
 }
 
 // Hard-delete a request the user wants gone from their list (terminal states only).

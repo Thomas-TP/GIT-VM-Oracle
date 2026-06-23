@@ -13,8 +13,6 @@ export interface Env {
   AWS_SUBNET_ID: string;
   AWS_SECURITY_GROUP_ID: string;
   AWS_KEY_NAME: string;
-  AWS_EXPORT_BUCKET?: string; // S3 bucket for one-click snapshot disk exports (.vmdk/.vdi)
-  AWS_EXPORT_PROFILE?: string; // IAM instance profile name for the export helper
 
   APP_URL: string;
   GRAFANA_URL?: string; // optional: link shown in the admin Monitoring tab

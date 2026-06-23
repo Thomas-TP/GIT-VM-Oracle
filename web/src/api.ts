@@ -74,8 +74,8 @@ export const api = {
   userSnapshots: () => req<{ snapshots: Snapshot[] }>('/api/snapshots').then((r) => r.snapshots),
   setSnapshotOnDelete: (id: number, enabled: boolean) =>
     req<{ ok: true }>(`/api/requests/${id}/snapshot-on-delete`, { method: 'POST', body: JSON.stringify({ enabled }) }),
-  exportSnapshot: (id: number, sid: number, target: 'vmware' | 'virtualbox') =>
-    req<{ ok: true; status: string }>(`/api/requests/${id}/snapshots/${sid}/export`, { method: 'POST', body: JSON.stringify({ target }) }),
+  deleteSnapshot: (id: number, sid: number) =>
+    req<{ ok: true }>(`/api/requests/${id}/snapshots/${sid}`, { method: 'DELETE' }),
   start: (id: number) => req<{ ok: true }>(`/api/requests/${id}/start`, { method: 'POST' }),
   stop: (id: number) => req<{ ok: true }>(`/api/requests/${id}/stop`, { method: 'POST' }),
   reboot: (id: number) => req<{ ok: true }>(`/api/requests/${id}/reboot`, { method: 'POST' }),
