@@ -77,6 +77,11 @@ export function AppShell({ user, children }: { user: User; children: ReactNode }
             <NavLink to="/new" className={navCls}>
               {t('nav.create')}
             </NavLink>
+            {(user.role === 'formateur' || user.role === 'admin') && (
+              <NavLink to="/trainer" className={navCls}>
+                {t('nav.trainer')}
+              </NavLink>
+            )}
             {user.role === 'admin' && (
               <NavLink to="/admin" className={navCls}>
                 {t('nav.admin')}

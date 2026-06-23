@@ -38,7 +38,7 @@ export interface Env {
 export interface SessionUser {
   email: string;
   name: string;
-  role: 'member' | 'admin';
+  role: 'member' | 'formateur' | 'admin';
 }
 
 export interface VmRequestRow {

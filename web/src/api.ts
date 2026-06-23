@@ -98,7 +98,7 @@ export const api = {
   adminUsers: () => req<{ users: AdminUser[] }>('/api/admin/users').then((r) => r.users),
   adminAudit: (limit = 150) =>
     req<{ entries: AuditEntry[] }>(`/api/admin/audit?limit=${limit}`).then((r) => r.entries),
-  setUserRole: (email: string, role: 'admin' | 'member') =>
+  setUserRole: (email: string, role: 'admin' | 'formateur' | 'member') =>
     req<{ ok: true }>(`/api/admin/users/${encodeURIComponent(email)}/role`, {
       method: 'POST',
       body: JSON.stringify({ role }),
@@ -110,6 +110,12 @@ export const api = {
   groupApprove: (groupId: string) => req<{ ok: true; approved: number }>(`/api/admin/groups/${groupId}/approve`, { method: 'POST' }),
   groupReject: (groupId: string, note: string) =>
     req<{ ok: true }>(`/api/admin/groups/${groupId}/reject`, { method: 'POST', body: JSON.stringify({ note }) }),
+
+  trainerUsers: () => req<{ users: { email: string; name: string | null }[] }>('/api/trainer/users').then((r) => r.users),
+  trainerBatch: (payload: {
+    perf: string; storage: string; os: string; course: string; baseName: string; groupName: string;
+    purpose: string; count: number; userEmails: string[]; startDate: string | null; endDate: string;
+  }) => req<{ ok: true; ids: number[]; groupId: string }>('/api/trainer/batch', { method: 'POST', body: JSON.stringify(payload) }),
 
   notifications: () => req<{ notifications: Notification[]; unread: number }>('/api/notifications'),
   markNotificationsRead: () => req<{ ok: true }>('/api/notifications/read', { method: 'POST' }),

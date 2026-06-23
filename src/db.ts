@@ -13,7 +13,11 @@ export async function upsertUser(env: Env, user: Omit<SessionUser, 'role'>): Pro
     .bind(user.email)
     .first<{ role: string }>();
   const role: SessionUser['role'] =
-    isAdmin(env, user.email) || existing?.role === 'admin' ? 'admin' : 'member';
+    isAdmin(env, user.email) || existing?.role === 'admin'
+      ? 'admin'
+      : existing?.role === 'formateur'
+        ? 'formateur'
+        : 'member';
   await env.DB.prepare(
     `INSERT INTO users (email, name, role) VALUES (?1, ?2, ?3)
      ON CONFLICT(email) DO UPDATE SET name = ?2, role = ?3`
@@ -30,7 +34,7 @@ export async function listUsers(env: Env) {
   return res.results ?? [];
 }
 
-export async function setUserRole(env: Env, email: string, role: 'member' | 'admin') {
+export async function setUserRole(env: Env, email: string, role: 'member' | 'formateur' | 'admin') {
   await env.DB.prepare(`UPDATE users SET role = ?2 WHERE email = ?1`).bind(email, role).run();
 }
 

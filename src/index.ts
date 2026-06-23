@@ -155,6 +155,14 @@ const apiAdmin = async (c: any, next: any) => {
   c.set('user', user);
   await next();
 };
+// Trainer (formateur) or admin — for the group-request feature.
+const apiTrainer = async (c: any, next: any) => {
+  const user = await loadUser(c);
+  if (!user) return c.json({ error: 'unauthorized' }, 401);
+  if (user.role !== 'formateur' && user.role !== 'admin') return c.json({ error: 'forbidden' }, 403);
+  c.set('user', user);
+  await next();
+};
 
 // Strong random password for Windows (RDP). Guarantees one of each class and
 // avoids characters that are awkward to quote in PowerShell / RDP clients.
@@ -902,10 +910,58 @@ app.post('/api/admin/users/:email/role', apiAdmin, async (c) => {
   const admin = c.get('user');
   const email = decodeURIComponent(c.req.param('email')).toLowerCase();
   const body = await c.req.json().catch(() => ({}));
-  const role = body.role === 'admin' ? 'admin' : 'member';
+  const role = body.role === 'admin' ? 'admin' : body.role === 'formateur' ? 'formateur' : 'member';
   await setUserRole(c.env, email, role);
   await audit(c.env, admin.email, 'user.role', email, role);
   return c.json({ ok: true });
+});
+
+// ---- Trainer (formateur) : group request — create N VMs assigned to platform users ----
+app.get('/api/trainer/users', apiTrainer, async (c) => {
+  const users = await listUsers(c.env);
+  return c.json({ users: users.map((u: any) => ({ email: u.email, name: u.name })) });
+});
+
+app.post('/api/trainer/batch', apiTrainer, async (c) => {
+  const trainer = c.get('user');
+  const body = await c.req.json().catch(() => ({}));
+  const perf = String(body.perf ?? ''), storage = String(body.storage ?? ''), os = String(body.os ?? '');
+  const course = String(body.course ?? ''), baseName = String(body.baseName ?? '').trim().slice(0, 50);
+  const purpose = String(body.purpose ?? '').trim();
+  const groupName = String(body.groupName ?? '').trim().slice(0, 80);
+  const count = Math.floor(Number(body.count));
+  const emails: string[] = Array.isArray(body.userEmails)
+    ? Array.from(new Set((body.userEmails as any[]).map((e) => String(e).trim().toLowerCase()).filter(Boolean) as string[]))
+    : [];
+  if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !isValidCourse(course)) return c.json({ error: 'invalid_request' }, 400);
+  if (!baseName || !purpose || !groupName) return c.json({ error: 'invalid_request' }, 400);
+  if (!Number.isInteger(count) || count < 1 || count > 30) return c.json({ error: 'invalid_count' }, 400);
+  if (!emails.length || emails.length > count) return c.json({ error: 'invalid_users' }, 400);
+  if (OS[os].minStorageGb && STORAGE[storage].sizeGb < OS[os].minStorageGb!) return c.json({ error: 'storage_too_small' }, 400);
+  const end = body.endDate ? new Date(String(body.endDate)) : null;
+  const start = body.startDate ? new Date(String(body.startDate)) : null;
+  if (!end || isNaN(end.getTime()) || end.getTime() <= Date.now()) return c.json({ error: 'invalid_end_date' }, 400);
+  if (start && (isNaN(start.getTime()) || start.getTime() >= end.getTime())) return c.json({ error: 'invalid_start_date' }, 400);
+  // Only assign to known platform users.
+  const known = new Set((await listUsers(c.env)).map((u: any) => String(u.email).toLowerCase()));
+  for (const e of emails) if (!known.has(e)) return c.json({ error: 'unknown_user', email: e }, 400);
+
+  const groupId = randomToken(8);
+  const ids: number[] = [];
+  for (let i = 0; i < count; i++) {
+    const owner = emails[i % emails.length]; // round-robin distribution
+    const name = `${baseName} ${i + 1}`;
+    const id = await createRequest(
+      c.env, owner, purpose, perf, storage, os, c.env.AWS_REGION,
+      start ? start.toISOString() : null, end.toISOString(), course || null, groupId, groupName, null, name
+    );
+    ids.push(id);
+    await addNotification(c.env, owner, 'request_new', `/requests/${id}`);
+  }
+  await notifyAdminsInApp(c.env, 'request_new', '/admin');
+  c.executionCtx.waitUntil(notifyAdminsNewRequest(c.env, ids[0], trainer.email, `${count} VM (formateur)`));
+  await audit(c.env, trainer.email, 'trainer.batch', `grp:${groupId}`, `${count} vm / ${emails.length} users`);
+  return c.json({ ok: true, ids, groupId, groupName }, 201);
 });
 
 app.get('/api/admin/requests.csv', apiAdmin, async (c) => {
