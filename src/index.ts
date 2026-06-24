@@ -844,6 +844,17 @@ app.get('/api/requests/:id/live', apiAuth, async (c) => {
   try {
     const s = await describeInstance(c.env, ctx.vm.aws_instance_id);
     await updateVm(c.env, id, s.state, s.publicIp);
+    // Self-heal latency: OCI boots in ~1 min but the reconcile loop only runs every few
+    // minutes. If the instance is up while the request is still 'provisioning', promote it
+    // now so the page reflects OCI immediately (idempotent — reconcile won't redo it).
+    if (ctx.r.status === 'provisioning' && s.state === 'running' && s.publicIp) {
+      await setRequestStatus(c.env, id, 'active');
+      await audit(c.env, 'system', 'vm.active', `req:${id}`, s.publicIp);
+      await addNotification(c.env, ctx.r.user_email, 'ready', `/requests/${id}`);
+      c.executionCtx.waitUntil(
+        notifyUserReady(c.env, ctx.r.user_email, id, s.publicIp, ctx.vm.ssh_user ?? 'ubuntu', ctx.vm.connect_method === 'rdp' ? 'rdp' : 'ssh')
+      );
+    }
     return c.json({ state: s.state, publicIp: s.publicIp ?? null, launchTime: s.launchTime ?? null });
   } catch (e: any) {
     return c.json({ error: e.message }, 500);
