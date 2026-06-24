@@ -52,8 +52,8 @@ export interface OsPreset {
 // E4 ≈ 0.025 $/OCPU·h, E5 ≈ 0.03 $/OCPU·h, mémoire ≈ 0.0015 $/GB·h.
 export const PERF: Record<string, PerfPreset> = {
   micro: { id: 'micro', label: 'Micro (gratuit)', shape: 'VM.Standard.E2.1.Micro', vcpu: 1, ramGb: 1, hourlyUsd: 0, description: 'Always Free — 1 OCPU / 1 Go. Tests légers, scripts, apprentissage.' },
-  eco: { id: 'eco', label: 'Eco', shape: 'VM.Standard.E4.Flex', ocpus: 1, memoryGb: 8, vcpu: 2, ramGb: 8, hourlyUsd: 0.037, description: '1 OCPU / 8 Go — petits services, dev.' },
-  std: { id: 'std', label: 'Standard', shape: 'VM.Standard.E4.Flex', ocpus: 2, memoryGb: 16, vcpu: 4, ramGb: 16, hourlyUsd: 0.074, description: '2 OCPU / 16 Go — la plupart des cours, Windows, conteneurs.', recommended: true },
+  eco: { id: 'eco', label: 'Eco', shape: 'VM.Standard.E5.Flex', ocpus: 1, memoryGb: 8, vcpu: 2, ramGb: 8, hourlyUsd: 0.037, description: '1 OCPU / 8 Go — petits services, dev.' },
+  std: { id: 'std', label: 'Standard', shape: 'VM.Standard.E5.Flex', ocpus: 2, memoryGb: 16, vcpu: 4, ramGb: 16, hourlyUsd: 0.074, description: '2 OCPU / 16 Go — la plupart des cours, Windows, conteneurs.', recommended: true },
   perf: { id: 'perf', label: 'Performance', shape: 'VM.Standard.E5.Flex', ocpus: 4, memoryGb: 32, vcpu: 8, ramGb: 32, hourlyUsd: 0.168, description: '4 OCPU / 32 Go — compilation, bases de données, charges soutenues.' },
   pro: { id: 'pro', label: 'Pro', shape: 'VM.Standard.E5.Flex', ocpus: 8, memoryGb: 64, vcpu: 16, ramGb: 64, hourlyUsd: 0.336, description: '8 OCPU / 64 Go — gros builds, data, clusters de test.' },
   max: { id: 'max', label: 'Max', shape: 'VM.Standard.E5.Flex', ocpus: 16, memoryGb: 128, vcpu: 32, ramGb: 128, hourlyUsd: 0.672, description: '16 OCPU / 128 Go — charges intensives ponctuelles.' },

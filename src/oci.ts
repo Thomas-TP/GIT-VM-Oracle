@@ -119,6 +119,12 @@ function mapState(s: string | undefined): string {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// Equivalent x86 flexible shapes (same shapeConfig: OCPU + memoryInGBs), tried in order
+// when a shape is out of host capacity. Mixes AMD (E5/E4/E3) and Intel (Standard3) so a
+// launch can succeed even when one CPU family is saturated in the AD.
+const X86_FLEX_FALLBACK = ['VM.Standard.E5.Flex', 'VM.Standard.E4.Flex', 'VM.Standard.E3.Flex', 'VM.Standard3.Flex'];
+const isCapacityError = (m: string) => /capacity|out of host/i.test(m);
+
 // ---- SSH keys ----------------------------------------------------------
 // OCI has no managed key pairs: we generate the pair in-Worker, inject the public
 // half into instance metadata (ssh_authorized_keys), and store the private half
@@ -207,7 +213,6 @@ export async function launchInstance(env: Env, p: LaunchParams): Promise<LaunchR
     compartmentId: env.OCI_COMPARTMENT_OCID,
     availabilityDomain: env.OCI_AVAILABILITY_DOMAIN,
     displayName: (p.nameTag && p.nameTag.trim()) ? p.nameTag.trim().slice(0, 255) : `vm-portal-req-${p.requestId}`,
-    shape: p.shape,
     sourceDetails,
     createVnicDetails: { subnetId: env.OCI_SUBNET_ID, assignPublicIp: true },
     metadata,
@@ -216,9 +221,22 @@ export async function launchInstance(env: Env, p: LaunchParams): Promise<LaunchR
   // shapeConfig is only valid for flexible shapes (those advertising OCPU/memory).
   if (p.ocpus) body.shapeConfig = { ocpus: p.ocpus, memoryInGBs: p.memoryGb ?? p.ocpus * 8 };
 
-  const r = await iaas<{ id: string }>(env, 'POST', '/20160918/instances', body);
-  if (!r?.id) throw new Error('LaunchInstance: no instance id in response');
-  return { instanceId: r.id };
+  // "Out of host capacity" is common on trial accounts: for flexible x86 shapes, fall back
+  // through equivalent shapes (same OCPU/memory) until one has capacity. Capacity rejections
+  // create no instance (no cost); only the first successful launch is created.
+  const shapes = p.ocpus ? [p.shape, ...X86_FLEX_FALLBACK.filter((s) => s !== p.shape)] : [p.shape];
+  let lastErr: any;
+  for (const shape of shapes) {
+    try {
+      const r = await iaas<{ id: string }>(env, 'POST', '/20160918/instances', { ...body, shape });
+      if (!r?.id) throw new Error('LaunchInstance: no instance id in response');
+      return { instanceId: r.id };
+    } catch (e: any) {
+      lastErr = e;
+      if (!isCapacityError(e.message)) throw e; // not a capacity issue → fail fast
+    }
+  }
+  throw lastErr ?? new Error('LaunchInstance: no shape with available capacity');
 }
 
 export interface InstanceStatus { state: string; publicIp?: string; launchTime?: string; }
