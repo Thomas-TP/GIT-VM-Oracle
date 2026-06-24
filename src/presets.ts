@@ -244,7 +244,7 @@ export function buildWindowsCourseInstall(courseId: string | null | undefined): 
 }
 
 export const STORAGE_USD_GB_MONTH = 0.0255; // OCI block volume, balanced 10 VPU/GB (approx)
-const HOURS_PER_MONTH = 730;
+export const HOURS_PER_MONTH = 730;
 
 export const isValidPerf = (id: string) => Object.prototype.hasOwnProperty.call(PERF, id);
 export const isValidStorage = (id: string) => Object.prototype.hasOwnProperty.call(STORAGE, id);

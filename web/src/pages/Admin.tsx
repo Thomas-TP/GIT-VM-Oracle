@@ -4,12 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { api } from '../api';
 import type { AuditEntry, Metrics, VmRequest } from '../types';
-import { Card } from '../ui';
+import { Card, Spinner } from '../ui';
 import { fmtDate } from '../lib/format';
 import { UsersPanel } from '../components/UsersPanel';
 import { VmConsole } from '../components/VmConsole';
 
-type Tab = 'overview' | 'vms' | 'users' | 'monitoring';
+type Tab = 'overview' | 'vms' | 'users' | 'costs' | 'monitoring';
 
 /* ---------- shared bits ---------- */
 function StatCard({ label, value, dot }: { label: string; value: number; dot: string }) {
@@ -50,6 +50,7 @@ const ICONS: Record<Tab, string> = {
   overview: 'M4 13h6V4H4zM14 20h6v-9h-6zM14 4v4h6V4zM4 20h6v-4H4z',
   vms: 'M5 4h14a2 2 0 0 1 2 2v3H3V6a2 2 0 0 1 2-2zM3 15h18v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM7 7h.01M7 18h.01',
   users: 'M16 21v-2a4 4 0 0 0-8 0v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
+  costs: 'M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1zM2 10h20M6 15h3',
   monitoring: 'M22 12h-4l-3 9L9 3l-3 9H2',
 };
 
@@ -75,6 +76,7 @@ export function Admin() {
     { id: 'overview', label: t('admin.navOverview') },
     { id: 'vms', label: t('admin.navVms'), badge: pending },
     { id: 'users', label: t('admin.navUsers') },
+    { id: 'costs', label: t('cost.nav') },
     { id: 'monitoring', label: t('admin.navMonitoring') },
   ];
 
@@ -113,6 +115,7 @@ export function Admin() {
           {tab === 'overview' && <OverviewSection stats={stats} metrics={metricsQ.data} />}
           {tab === 'vms' && <VmConsole rows={rows} loading={allQ.isLoading} catalog={catalog} />}
           {tab === 'users' && <UsersSection rows={rows} />}
+          {tab === 'costs' && <CostSection />}
           {tab === 'monitoring' && <MonitoringSection grafanaUrl={catalog?.grafanaUrl} />}
         </div>
       </div>
@@ -256,6 +259,191 @@ function MonitoringSection({ grafanaUrl }: { grafanaUrl?: string }) {
             <li key={e}><code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">/api/monitoring/{e}</code></li>
           ))}
         </ul>
+      </Card>
+    </div>
+  );
+}
+
+/* ---------- Costs & monitoring ---------- */
+const money = (n: number, cur: string) => `${(n ?? 0).toFixed(2)} ${cur}`;
+const usd = (n: number) => `$${(n ?? 0).toFixed(2)}`;
+function fmtAge(h: number) {
+  if (!h || h < 0) return '—';
+  if (h < 1) return `${Math.round(h * 60)} min`;
+  if (h < 48) return `${h.toFixed(1)} h`;
+  return `${Math.round(h / 24)} j`;
+}
+function fmtProvision(s: number) {
+  if (!s) return '—';
+  if (s < 60) return `${Math.round(s)} s`;
+  return `${Math.floor(s / 60)} m ${Math.round(s % 60)} s`;
+}
+
+function BarRow({ label, value, frac, tone = 'bg-foreground/70' }: { label: string; value: string; frac: number; tone?: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-3 text-sm">
+        <span className="truncate text-muted-foreground">{label}</span>
+        <span className="shrink-0 font-medium tabular-nums">{value}</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div className={`h-full rounded-full ${tone}`} style={{ width: `${Math.max(2, Math.min(100, frac || 0))}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function BudgetBar({ used, budget, currency }: { used: number; budget: number; currency: string }) {
+  const pct = Math.min(100, (used / budget) * 100);
+  const tone = used >= budget ? 'bg-red-500' : used >= budget * 0.5 ? 'bg-amber-500' : 'bg-emerald-500';
+  return (
+    <div className="space-y-1.5">
+      <div className="relative h-3 overflow-hidden rounded-full bg-muted">
+        <div className={`h-full ${tone}`} style={{ width: `${pct}%` }} />
+        {[20, 50].map((m) => (
+          <div key={m} className="absolute top-0 h-full w-px bg-foreground/40" style={{ left: `${(m / budget) * 100}%` }} title={`${m} CHF`} />
+        ))}
+      </div>
+      <div className="flex justify-between text-xs tabular-nums text-muted-foreground">
+        <span className="font-medium text-foreground">{used.toFixed(2)} {currency}</span>
+        <span>/ {budget} CHF</span>
+      </div>
+    </div>
+  );
+}
+
+function DailyBars({ data, currency }: { data: { day: string; amount: number }[]; currency: string }) {
+  if (!data.length) return <p className="py-6 text-center text-sm text-muted-foreground">—</p>;
+  const max = Math.max(0.0001, ...data.map((d) => d.amount));
+  return (
+    <div className="flex h-32 items-end gap-1">
+      {data.map((d) => (
+        <div key={d.day} className="group relative flex-1" title={`${d.day}: ${d.amount.toFixed(2)} ${currency}`}>
+          <div className="w-full rounded-t bg-foreground/70 transition group-hover:bg-foreground" style={{ height: `${Math.max(2, (d.amount / max) * 100)}%` }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CostSection() {
+  const { t } = useTranslation();
+  const q = useQuery({ queryKey: ['admin-costs'], queryFn: api.adminCosts, refetchInterval: 30000 });
+  if (q.isLoading) return <div className="flex justify-center py-16"><Spinner className="h-6 w-6" /></div>;
+  const d = q.data;
+  if (!d) return <p className="py-10 text-center text-sm text-muted-foreground">{t('cost.noData')}</p>;
+  const cur = d.real?.currency || d.currency || 'CHF';
+  const realErr = !!d.real?.error;
+  const maxSvc = Math.max(0.0001, ...d.real.byService.map((s) => s.amount));
+  const maxUser = Math.max(1, ...d.estimate.byUser.map((u) => u.monthlyUsd));
+  const maxOs = Math.max(1, ...d.byOs.map((o) => o.count));
+  const maxShape = Math.max(1, ...d.estimate.byShape.map((s) => s.count));
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle title={t('cost.title')} hint={t('cost.hint')} />
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <MetricCard label={t('cost.realMonth')} value={realErr ? '—' : money(d.real.total, cur)} />
+        <MetricCard label={t('cost.projection')} value={realErr ? '—' : money(d.projectionMonthly, cur)} />
+        <MetricCard label={t('cost.runRate')} value={`${usd(d.estimate.monthlyUsd)}${t('cost.perMonth')}`} />
+        <MetricCard label={t('cost.activeVms')} value={String(d.vms.active)} />
+      </div>
+
+      <Card className="p-5">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('cost.budget')}</h3>
+          <span className="text-xs text-muted-foreground">{t('cost.budgetNote')}</span>
+        </div>
+        <BudgetBar used={realErr ? 0 : d.real.total} budget={d.budgetChf} currency={cur} />
+      </Card>
+
+      <Card className="p-5">
+        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('cost.daily')}</h3>
+        {realErr ? <p className="py-6 text-center text-sm text-muted-foreground">{t('cost.realError')}</p> : <DailyBars data={d.real.byDay} currency={cur} />}
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-5">
+          <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('cost.byService')}</h3>
+          {realErr || !d.real.byService.length ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">—</p>
+          ) : (
+            <div className="space-y-3">{d.real.byService.slice(0, 8).map((s) => <BarRow key={s.service} label={s.service} value={money(s.amount, cur)} frac={(s.amount / maxSvc) * 100} />)}</div>
+          )}
+        </Card>
+        <Card className="p-5">
+          <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('cost.byUser')}</h3>
+          {!d.estimate.byUser.length ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">{t('cost.noActive')}</p>
+          ) : (
+            <div className="space-y-3">{d.estimate.byUser.slice(0, 8).map((u) => <BarRow key={u.email} label={u.email} value={`${usd(u.monthlyUsd)}${t('cost.perMonth')}`} frac={(u.monthlyUsd / maxUser) * 100} />)}</div>
+          )}
+          <p className="mt-3 text-xs text-muted-foreground">{t('cost.estimateNote')}</p>
+        </Card>
+      </div>
+
+      <div>
+        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('cost.statsTitle')}</h3>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard label={t('metric.total')} value={String(d.vms.total)} />
+          <MetricCard label={t('metric.successRate')} value={`${d.vms.successRate}%`} />
+          <MetricCard label={t('metric.avgProvision')} value={fmtProvision(d.vms.avgProvisionSeconds)} />
+          <MetricCard label={t('cost.avgLifetime')} value={fmtAge(d.vms.avgLifetimeHours)} />
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-5">
+          <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('cost.byOs')}</h3>
+          {!d.byOs.length ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">{t('cost.noActive')}</p>
+          ) : (
+            <div className="space-y-3">{d.byOs.map((o) => <BarRow key={o.os} label={o.os} value={String(o.count)} frac={(o.count / maxOs) * 100} />)}</div>
+          )}
+        </Card>
+        <Card className="p-5">
+          <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('cost.byShape')}</h3>
+          {!d.estimate.byShape.length ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">{t('cost.noActive')}</p>
+          ) : (
+            <div className="space-y-3">{d.estimate.byShape.map((s) => <BarRow key={s.shape} label={`${s.shape} · ${s.count}`} value={`${usd(s.monthlyUsd)}${t('cost.perMonth')}`} frac={(s.count / maxShape) * 100} />)}</div>
+          )}
+        </Card>
+      </div>
+
+      <Card className="p-5">
+        <h3 className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('cost.activeTable')}</h3>
+        {!d.active.length ? (
+          <p className="py-4 text-center text-sm text-muted-foreground">{t('cost.noActive')}</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <th className="pb-2 pr-3 font-medium">{t('cost.colName')}</th>
+                  <th className="pb-2 pr-3 font-medium">{t('cost.colUser')}</th>
+                  <th className="pb-2 pr-3 font-medium">{t('cost.colOs')}</th>
+                  <th className="pb-2 pr-3 font-medium">{t('cost.colShape')}</th>
+                  <th className="pb-2 pr-3 text-right font-medium">{t('cost.colAge')}</th>
+                  <th className="pb-2 text-right font-medium">{t('cost.colCost')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {d.active.map((v) => (
+                  <tr key={v.id} className="border-b border-border/50 last:border-0">
+                    <td className="py-2 pr-3 font-medium">{v.name || `#${v.id}`}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">{v.user}</td>
+                    <td className="py-2 pr-3 text-muted-foreground">{v.os}</td>
+                    <td className="py-2 pr-3 font-mono text-xs text-muted-foreground">{v.shape}</td>
+                    <td className="py-2 pr-3 text-right tabular-nums">{fmtAge(v.ageHours)}</td>
+                    <td className="py-2 text-right tabular-nums">{usd(v.monthlyUsd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );

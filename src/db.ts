@@ -457,6 +457,39 @@ export async function listActiveForCost(env: Env): Promise<{ preset: string; sto
   return res.results ?? [];
 }
 
+// Active VMs with the detail the cost dashboard needs (owner, OS, preset, storage, age).
+export interface ActiveVmDetail {
+  id: number;
+  name: string | null;
+  user_email: string;
+  os: string | null;
+  preset: string;
+  storage: string | null;
+  created_at: string;
+  vm_created_at: string | null;
+}
+export async function listActiveVmsDetailed(env: Env): Promise<ActiveVmDetail[]> {
+  const res = await env.DB.prepare(
+    `SELECT r.id, r.name, r.user_email, r.os, r.preset, r.storage, r.created_at,
+            v.created_at AS vm_created_at
+       FROM vm_requests r JOIN vms v ON v.request_id = r.id
+      WHERE r.status = 'active' AND r.expired_at IS NULL
+      ORDER BY v.created_at`
+  ).all<ActiveVmDetail>();
+  return res.results ?? [];
+}
+
+// Average VM lifetime (hours): request creation -> termination event in the audit log.
+export async function avgLifetimeHours(env: Env): Promise<number> {
+  const r = await env.DB.prepare(
+    `SELECT AVG((julianday(a.created_at) - julianday(r.created_at)) * 24) AS h
+       FROM vm_requests r
+       JOIN audit_log a ON a.target = ('req:' || r.id)
+      WHERE a.action IN ('vm.expired.terminated', 'vm.terminate', 'vm.drift.terminated')`
+  ).first<{ h: number | null }>();
+  return Math.round((r?.h ?? 0) * 10) / 10;
+}
+
 export async function countByStatus(env: Env): Promise<Record<string, number>> {
   // Bucket expired VMs separately (derived from expired_at) so "active" excludes them.
   const res = await env.DB.prepare(

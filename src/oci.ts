@@ -359,3 +359,44 @@ export async function maxCpuOverWindow(env: Env, instanceId: string, minutes: nu
   if (!points.length) return null;
   return { max: Math.max(...points), datapoints: points.length };
 }
+
+// ---- Cost (real billed amount, OCI Usage/Cost API) ---------------------
+export interface CostSummary {
+  currency: string;
+  total: number;
+  byDay: { day: string; amount: number }[];
+  byService: { service: string; amount: number }[];
+}
+
+// Real billed cost over [startISO, endISO) grouped by day & service (one signed call).
+export async function getCostSummary(env: Env, startISO: string, endISO: string): Promise<CostSummary> {
+  const body = {
+    tenantId: env.OCI_TENANCY_OCID,
+    timeUsageStarted: startISO,
+    timeUsageEnded: endISO,
+    granularity: 'DAILY',
+    queryType: 'COST',
+    groupBy: ['service'],
+  };
+  const res = await ociFetch<{ items?: any[] }>(env, 'POST', `usageapi.${env.OCI_REGION}.oci.oraclecloud.com`, '/20200107/usage', body);
+  const items = res?.items ?? [];
+  let currency = 'USD';
+  let total = 0;
+  const days = new Map<string, number>();
+  const svcs = new Map<string, number>();
+  for (const it of items) {
+    const amt = Number(it.computedAmount ?? 0) || 0;
+    if (it.currency) currency = it.currency;
+    total += amt;
+    const day = String(it.timeUsageStarted ?? '').slice(0, 10);
+    if (day) days.set(day, (days.get(day) ?? 0) + amt);
+    const svc = it.service || 'Autre';
+    svcs.set(svc, (svcs.get(svc) ?? 0) + amt);
+  }
+  return {
+    currency,
+    total,
+    byDay: [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, amount]) => ({ day, amount })),
+    byService: [...svcs.entries()].filter(([, a]) => a > 0).sort((a, b) => b[1] - a[1]).map(([service, amount]) => ({ service, amount })),
+  };
+}

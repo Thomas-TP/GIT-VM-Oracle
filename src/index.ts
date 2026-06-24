@@ -16,6 +16,7 @@ import {
   buildWindowsCourseInstall,
   estimateMonthlyUsd,
   STORAGE_USD_GB_MONTH,
+  HOURS_PER_MONTH,
 } from './presets';
 import { reportError } from './sentry';
 import {
@@ -33,6 +34,8 @@ import {
   countByOs,
   countByUser,
   listActiveForCost,
+  listActiveVmsDetailed,
+  avgLifetimeHours,
   setRequestStatus,
   createVm,
   updateVm,
@@ -96,6 +99,7 @@ import {
   deleteSnapshot,
   registerImageFromSnapshot,
   maxCpuOverWindow,
+  getCostSummary,
 } from './oci';
 import {
   notifyAdminsNewRequest,
@@ -913,6 +917,74 @@ app.get('/api/admin/metrics', apiAdmin, async (c) => {
   return c.json({ metrics: await metrics(c.env) });
 });
 
+// Cost dashboard: real billed cost (OCI Usage API) + 24/7 run-rate estimate + VM/duration stats.
+app.get('/api/admin/costs', apiAdmin, async (c) => {
+  const now = new Date();
+  const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString();
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+
+  let real: any;
+  try {
+    real = await getCostSummary(c.env, monthStart, tomorrow);
+  } catch (e: any) {
+    real = { error: e.message, currency: 'CHF', total: 0, byDay: [], byService: [] };
+  }
+
+  // 24/7 list-price run-rate from currently-active VMs.
+  const active = await listActiveVmsDetailed(c.env);
+  const storageHourly = (sid: string | null) => ((STORAGE[sid ?? '']?.sizeGb ?? 0) * STORAGE_USD_GB_MONTH) / 730;
+  let hourly = 0;
+  const byUser: Record<string, number> = {};
+  const byShape: Record<string, { count: number; monthlyUsd: number }> = {};
+  const byOs: Record<string, number> = {};
+  const activeRows = active.map((v) => {
+    const perf = PERF[v.preset];
+    const h = (perf?.hourlyUsd ?? 0) + storageHourly(v.storage);
+    hourly += h;
+    byUser[v.user_email] = (byUser[v.user_email] ?? 0) + h * HOURS_PER_MONTH;
+    const shape = perf?.shape ?? v.preset;
+    byShape[shape] = byShape[shape] ?? { count: 0, monthlyUsd: 0 };
+    byShape[shape].count++;
+    byShape[shape].monthlyUsd += h * HOURS_PER_MONTH;
+    const osLabel = OS[v.os ?? '']?.label ?? v.os ?? '?';
+    byOs[osLabel] = (byOs[osLabel] ?? 0) + 1;
+    const since = String(v.vm_created_at ?? v.created_at).replace(' ', 'T') + 'Z';
+    const ageHours = Math.max(0, Math.round(((now.getTime() - new Date(since).getTime()) / 3_600_000) * 10) / 10);
+    return { id: v.id, name: v.name, user: v.user_email, os: osLabel, shape, ageHours, monthlyUsd: round2(h * HOURS_PER_MONTH) };
+  });
+
+  const stats = await countByStatus(c.env);
+  const m = await metrics(c.env);
+  const avgLife = await avgLifetimeHours(c.env);
+  const daysInMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0)).getUTCDate();
+  const elapsed = Math.max(1, real?.byDay?.length ?? now.getUTCDate());
+  const projectionMonthly = real?.total ? round2((real.total / elapsed) * daysInMonth) : 0;
+
+  return c.json({
+    currency: real?.currency ?? 'CHF',
+    budgetChf: 100,
+    real,
+    projectionMonthly,
+    estimate: {
+      hourlyUsd: round2(hourly),
+      monthlyUsd: round2(hourly * HOURS_PER_MONTH),
+      byUser: Object.entries(byUser).map(([email, monthlyUsd]) => ({ email, monthlyUsd: round2(monthlyUsd) })).sort((a, b) => b.monthlyUsd - a.monthlyUsd),
+      byShape: Object.entries(byShape).map(([shape, v]) => ({ shape, count: v.count, monthlyUsd: round2(v.monthlyUsd) })).sort((a, b) => b.monthlyUsd - a.monthlyUsd),
+    },
+    byOs: Object.entries(byOs).map(([os, count]) => ({ os, count })).sort((a, b) => b.count - a.count),
+    vms: {
+      statusCounts: stats,
+      total: m.total,
+      active: activeRows.length,
+      successRate: Math.round(m.successRate * 100),
+      avgProvisionSeconds: m.avgProvisionSeconds,
+      avgLifetimeHours: avgLife,
+    },
+    active: activeRows,
+  });
+});
+
 app.get('/api/admin/users', apiAdmin, async (c) => {
   return c.json({ users: await listUsers(c.env) });
 });
@@ -1161,7 +1233,17 @@ app.get('/api/internal/oci-selftest', async (c) => {
   if (!c.env.RECONCILE_TOKEN || provided !== c.env.RECONCILE_TOKEN) return c.json({ error: 'unauthorized' }, 401);
   try {
     const managed = await listManagedInstances(c.env);
-    return c.json({ ok: true, region: c.env.OCI_REGION, managedInstances: Object.keys(managed).length });
+    const now = new Date();
+    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    const tomorrow = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)).toISOString();
+    let cost: any;
+    try {
+      const cs = await getCostSummary(c.env, monthStart, tomorrow);
+      cost = { currency: cs.currency, total: cs.total, days: cs.byDay.length, services: cs.byService.length };
+    } catch (e: any) {
+      cost = { error: e.message };
+    }
+    return c.json({ ok: true, region: c.env.OCI_REGION, managedInstances: Object.keys(managed).length, cost });
   } catch (e: any) {
     return c.json({ ok: false, error: e.message }, 500);
   }

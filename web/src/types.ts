@@ -115,6 +115,35 @@ export interface Snapshot {
   completed_at: string | null;
 }
 
+export interface CostDashboard {
+  currency: string;
+  budgetChf: number;
+  real: {
+    currency?: string;
+    total: number;
+    byDay: { day: string; amount: number }[];
+    byService: { service: string; amount: number }[];
+    error?: string;
+  };
+  projectionMonthly: number;
+  estimate: {
+    hourlyUsd: number;
+    monthlyUsd: number;
+    byUser: { email: string; monthlyUsd: number }[];
+    byShape: { shape: string; count: number; monthlyUsd: number }[];
+  };
+  byOs: { os: string; count: number }[];
+  vms: {
+    statusCounts: Record<string, number>;
+    total: number;
+    active: number;
+    successRate: number;
+    avgProvisionSeconds: number;
+    avgLifetimeHours: number;
+  };
+  active: { id: number; name: string | null; user: string; os: string; shape: string; ageHours: number; monthlyUsd: number }[];
+}
+
 export interface VmRequest {
   id: number;
   user_email: string;
