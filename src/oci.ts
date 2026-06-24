@@ -26,7 +26,10 @@ function b64urlToBytes(s: string): Uint8Array {
   return out;
 }
 function pemToDer(pem: string): Uint8Array {
-  const b64 = pem.replace(/-----BEGIN [^-]+-----/, '').replace(/-----END [^-]+-----/, '').replace(/\s+/g, '');
+  // Extract strictly the base64 between the BEGIN/END markers, then drop any
+  // non-base64 char (newlines, and stray trailing labels like "OCI_API_KEY").
+  const m = pem.match(/-----BEGIN [^-]+-----([\s\S]*?)-----END [^-]+-----/);
+  const b64 = (m ? m[1] : pem).replace(/[^A-Za-z0-9+/=]/g, '');
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);

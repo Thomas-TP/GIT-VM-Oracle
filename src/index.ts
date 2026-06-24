@@ -1143,6 +1143,19 @@ app.post('/api/internal/reconcile', async (c) => {
   return c.json({ ok: true });
 });
 
+// Ops self-test (token-gated): performs a real signed OCI call so signing/credentials
+// can be verified without provisioning. Returns the managed-instance count or the error.
+app.get('/api/internal/oci-selftest', async (c) => {
+  const provided = (c.req.header('authorization') ?? '').replace(/^Bearer\s+/i, '') || c.req.query('token') || '';
+  if (!c.env.RECONCILE_TOKEN || provided !== c.env.RECONCILE_TOKEN) return c.json({ error: 'unauthorized' }, 401);
+  try {
+    const managed = await listManagedInstances(c.env);
+    return c.json({ ok: true, region: c.env.OCI_REGION, managedInstances: Object.keys(managed).length });
+  } catch (e: any) {
+    return c.json({ ok: false, error: e.message }, 500);
+  }
+});
+
 // ---- Static assets (React SPA) -----------------------------------------
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
