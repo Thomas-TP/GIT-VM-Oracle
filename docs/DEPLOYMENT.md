@@ -36,7 +36,7 @@ Dans le dashboard Cloudflare → Worker `git-vm-portal` → **Build** :
   ```
 - **Deploy command** :
   ```
-  npx wrangler d1 migrations apply git_vm_portal --remote && npx wrangler deploy
+  npx wrangler d1 migrations apply git_vm_oracle --remote && npx wrangler deploy
   ```
 - **Production branch** : `main`
 - **Builds for non-production branches** : **Disabled** → une PR/branche **ne déploie rien**.
@@ -90,7 +90,7 @@ Si l'intégration Cloudflare est indisponible et qu'il faut publier en urgence :
 
 ```bash
 npm --prefix web run build
-npx wrangler d1 migrations apply git_vm_portal --remote   # si nouvelles migrations
+npx wrangler d1 migrations apply git_vm_oracle --remote   # si nouvelles migrations
 npx wrangler deploy
 ```
 
@@ -101,8 +101,8 @@ temps normal (désynchronise l'historique de déploiement géré par Cloudflare)
 
 Déjà fait pour cet environnement, documenté pour reproductibilité :
 
-1. **D1** : `wrangler d1 create git_vm_portal` → reporter l'`database_id` dans `wrangler.jsonc`.
-2. **Migrations** : `wrangler d1 migrations apply git_vm_portal --remote`.
+1. **D1** : `wrangler d1 create git_vm_oracle` → reporter l'`database_id` dans `wrangler.jsonc`.
+2. **Migrations** : `wrangler d1 migrations apply git_vm_oracle --remote`.
 3. **Secrets** : `wrangler secret put <NAME>` pour chacun (voir [CONFIGURATION.md](CONFIGURATION.md)).
 4. **Réseau AWS** : subnet + security group (SSH 22). Pour Windows : `node scripts/aws-open-rdp.mjs`
    (ouvre 3389 — **à restreindre** à une plage IP en prod).
