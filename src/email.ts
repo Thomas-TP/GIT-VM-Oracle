@@ -89,7 +89,7 @@ export async function notifyUserExpiring(env: Env, to: string, reqId: number, en
 export async function notifyUserExpired(env: Env, to: string, reqId: number) {
   const message =
     `Ta VM #${reqId} a atteint sa date de fin et a été automatiquement SUPPRIMÉE.\n\n` +
-    `L'instance AWS et son disque ont été détruits définitivement. Pour repartir, soumets une ` +
+    `L'instance OCI et son disque ont été détruits définitivement. Pour repartir, soumets une ` +
     `nouvelle demande depuis le portail.`;
   await sendMail(env, { to, subject: `VM #${reqId} expirée (supprimée)`, title: 'VM expirée — supprimée 🗑️', message });
 }

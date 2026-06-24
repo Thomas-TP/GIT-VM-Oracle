@@ -17,12 +17,15 @@
 
 Plateforme **self-service de provisioning de VM** : un utilisateur se connecte en **SSO Microsoft
 (Entra ID)**, nomme et demande une (ou plusieurs) VM depuis un catalogue, un **admin valide**, la VM
-est **provisionnée automatiquement sur AWS EC2** (clé SSH unique chiffrée, ou mot de passe RDP
-Windows), **durcie** (filtrage réseau), **sauvegardable** (snapshots EBS), **arrêtée si inactive**, et
-**supprimée à sa date de fin**. Le tout tourne sur **Cloudflare Workers**.
+est **provisionnée automatiquement sur Oracle Cloud (OCI) Compute** (clé SSH unique chiffrée, ou mot de
+passe RDP Windows), **durcie** (filtrage réseau), **sauvegardable** (boot volume backups), **arrêtée si
+inactive**, et **supprimée à sa date de fin**. Le tout tourne sur **Cloudflare Workers**.
 
-- **Prod** : <https://git-vm-portal.thomas-prudhomme.workers.dev>
-- **Repo** : <https://github.com/Thomas-TP/GIT-VM>
+> Variante **OCI** du projet (le socle AWS d'origine vit dans le repo `GIT-VM` / worker
+> `git-vm-portal`). Migration documentée dans [ADR 0010](docs/adr/0010-migration-vers-oci-compute.md).
+
+- **Prod** : <https://git-vm-oracle.thomas-prudhomme.workers.dev>
+- **Repo** : <https://github.com/Thomas-TP/GIT-VM-Oracle>
 
 ## 2. Règles d'or (NE PAS enfreindre)
 
@@ -48,7 +51,7 @@ Windows), **durcie** (filtrage réseau), **sauvegardable** (snapshots EBS), **ar
 | Base de données | Cloudflare **D1** (SQLite) |
 | Hébergement | Cloudflare Workers Static Assets (SPA) + Worker (API) |
 | Auth | Microsoft **Entra ID** (OIDC authorization-code, in-Worker, sans librairie) |
-| Compute | **AWS EC2** + EBS + CloudWatch (`eu-central-2` / Zurich), signé avec `aws4fetch` |
+| Compute | **OCI Compute** (E-Flex x86) + Block Volume + Monitoring (`eu-zurich-1` / Zurich), signé HTTP Signature RSA-SHA256 (Web Crypto, maison) |
 | Email | EmailJS (REST) · Erreurs : Sentry (optionnel) · Monitoring : Grafana Cloud (optionnel) |
 | CD | **Cloudflare Workers Builds** = build + migrate D1 + deploy sur `main` |
 
@@ -70,12 +73,12 @@ admin (Admin → Utilisateurs → sélecteur de rôle).
 ```
 src/                      WORKER (API + cron)
   index.ts                Routes OIDC (/auth/*), API (/api/*), middlewares (apiAuth/apiAdmin/apiTrainer),
-                          cron scheduled() + tout le réconciliateur. provisionRequest() = clé+EC2+userData.
+                          runReconcile() + /api/internal/reconcile. provisionRequest() = clé+instance+userData.
   oidc.ts                 Entra ID : authorizeUrl / exchangeCode / userFromIdToken
   crypto.ts               JWT HMAC maison, AES-GCM (clés SSH + mots de passe), randomToken
   db.ts                   Toutes les requêtes D1 (requests, vms, users, snapshots, audit, notifs, metrics)
-  aws.ts                  Client EC2/EBS/CloudWatch (RunInstances/Describe/Terminate/Start/Stop/Reboot,
-                          KeyPair, snapshots, RegisterImage, maxCpuOverWindow)
+  oci.ts                  Client OCI + signature RSA (Web Crypto) : launch/describe/start/stop/reboot/
+                          terminate, génération keypair SSH, boot volume backups, Monitoring (CPU)
   presets.ts              Catalogue PERF × STORAGE × OS + COURSES + coûts. SOURCE DE VÉRITÉ.
   email.ts                Notifications EmailJS · sentry.ts erreurs · types.ts Env + types worker
 migrations/               D1 (additif) : 0001 init … 0007 schedule · 0008 snapshot-on-delete ·
@@ -88,18 +91,21 @@ web/src/                  SPA REACT
   components/             AppShell · VmConsole (console admin) · GroupReview · RequestsTable ·
                           SnapshotPanel · GroupActions · SchedulePanel · ExtensionPanel ·
                           AdminReviewPanel · ConnectionGuide · DatePicker · UsersPanel · StatusBadge · OsIcon
-scripts/                  Helpers AWS one-off (Node, creds depuis l'env) :
-  aws-amis.mjs            Découvre les AMIs eu-central-2 · aws-open-rdp.mjs ouvre 3389
-  aws-budget.mjs          Budget AWS 50$/mois + alertes mail · aws-iam-snapshot.mjs droits snapshots
-  aws-iam-cloudwatch.mjs  Droit CloudWatch (active l'arrêt sur inactivité)
-  aws-harden-sg.mjs       Verrouille l'egress du Security Group (filtrage réseau, non contournable)
+scripts/                  Helpers OCI one-off (Node, creds depuis l'env) :
+  _oci.mjs                Signature OCI (node:crypto) + wrappers iaas/identity/telemetry/budgets + AD discovery
+  oci-setup.mjs           Crée VCN + IG + route + security list + subnet public (imprime les OCID)
+  oci-images.mjs          Découvre les OCID d'images plateforme par OS · oci-harden.mjs verrouille l'egress
+  oci-budget.mjs          Budget 100 CHF + alertes 20/50/100 (nécessite la policy usage-budgets)
 wrangler.jsonc            Config Worker : bindings D1, vars, crons, assets
 docs/                     Architecture, déploiement, configuration, ADR, analyse
 ```
 
 ## 6. Le pattern central : le réconciliateur
 
-**La DB = état désiré.** Une cron `*/2 * * * *` réconcilie le réel AWS avec la DB, en séquence :
+**La DB = état désiré.** Faute de cron Cloudflare (plafond de **5 cron triggers/compte** atteint), un
+**planificateur externe** (GitHub Actions `.github/workflows/reconcile.yml`, ~5 min) appelle
+**`POST /api/internal/reconcile`** (gardé par `RECONCILE_TOKEN`) pour réconcilier le réel OCI avec la
+DB, en séquence :
 
 1. `reconcile` — `provisioning → active` (instance running + IP + email « prête »), détection de
    **drift** (instance supprimée hors portail → `terminated`).
@@ -111,8 +117,8 @@ docs/                     Architecture, déploiement, configuration, ADR, analys
    (déf. 3 h, historique suffisant requis) → stop + notif. L'utilisateur peut relancer.
 6. `syncSnapshots` — suit les snapshots EBS en cours (`pending → completed/error`).
 
-Une cron `0 19 * * *` arrête les VM running (garde-fou coûts nocturne, ignore les VM planifiées).
-**Toute nouvelle automatisation de cycle de vie s'ajoute dans ce pipeline.**
+L'arrêt nocturne (garde-fou coûts, ~19:00 UTC) est **intégré au pipeline** (`runReconcile`), plus de
+cron dédié. **Toute nouvelle automatisation de cycle de vie s'ajoute dans ce pipeline.**
 
 ## 7. Modèle de données (D1)
 
@@ -200,16 +206,18 @@ D1 remote sont appliquées automatiquement** avant le déploiement. Livrer = ouv
 
 ## 13. Secrets, IAM & credentials
 
-Config **publique** dans `wrangler.jsonc` → `vars` (IDs Entra, AWS_REGION/SUBNET/SG, flags
-`SCHEDULED_STOP`/`IDLE_STOP`/`IDLE_STOP_HOURS`/`HARDENING`, EmailJS public…). **Secrets** via
-`wrangler secret put` : `SESSION_SECRET`, `ENTRA_CLIENT_SECRET`, `AWS_ACCESS_KEY_ID`,
-`AWS_SECRET_ACCESS_KEY`, `EMAILJS_PRIVATE_KEY`. Le Worker tourne avec un user IAM (`Claude`) dont les
-droits couvrent EC2 + EBS snapshots + CloudWatch read (voir scripts `aws-iam-*`). Détail de chaque
-variable, permissions IAM, app Entra, **rotation** : [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
+Config **publique** dans `wrangler.jsonc` → `vars` (IDs Entra, `OCI_REGION`/`OCI_TENANCY_OCID`/
+`OCI_USER_OCID`/`OCI_FINGERPRINT`/`OCI_COMPARTMENT_OCID`/`OCI_SUBNET_ID`/`OCI_AVAILABILITY_DOMAIN`,
+flags `SCHEDULED_STOP`/`IDLE_STOP`/`IDLE_STOP_HOURS`/`HARDENING`, EmailJS public…). **Secrets** via
+`wrangler secret put` : `SESSION_SECRET`, `ENTRA_CLIENT_SECRET`, `OCI_PRIVATE_KEY` (clé API PKCS#8 PEM),
+`EMAILJS_PRIVATE_KEY`, `RECONCILE_TOKEN`. Le Worker signe les appels OCI avec un **user API** dont les
+droits couvrent compute + block volume + monitoring (réseau créé une fois via `scripts/oci-setup.mjs`).
+Détail de chaque variable, app Entra, **rotation** : [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md)
 et [ADR 0006](docs/adr/0006-gestion-des-secrets.md).
 
-> ⚠️ Clés AWS fournies dans le chat/un fichier : usage **local uniquement** (env), **jamais
-> commitées**, et **rappeler de les révoquer/roter** ensuite.
+> ⚠️ Clé privée API OCI fournie dans le chat/un fichier : usage **local uniquement** (env) pour les
+> scripts, **jamais commitée**, mise dans le Worker via `wrangler secret put OCI_PRIVATE_KEY`, et à
+> **révoquer/roter** ensuite.
 
 ## 14. Pièges connus (gotchas)
 

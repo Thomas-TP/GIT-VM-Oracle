@@ -96,7 +96,7 @@ import {
   deleteSnapshot,
   registerImageFromSnapshot,
   maxCpuOverWindow,
-} from './aws';
+} from './oci';
 import {
   notifyAdminsNewRequest,
   notifyUserApproved,
@@ -229,8 +229,9 @@ async function provisionRequest(env: Env, req: any): Promise<string> {
   let encPassword: string | null = null;
   if (isWindows) {
     const password = generateWindowsPassword();
-    // EC2Launch v2 runs this on first boot; single-quoted so the password is literal.
-    const lines = [`net user Administrator '${password}'`];
+    // cloudbase-init runs this PowerShell on first boot (#ps1_sysnative). The OCI
+    // Windows admin account is `opc`; single-quoted so the password is literal.
+    const lines = [`net user opc '${password}'`];
     if (hardeningOn && !isRestore) lines.push(...windowsHardeningLines());
     if (!isRestore) {
       const win = buildWindowsCourseInstall(req.course);
@@ -240,7 +241,7 @@ async function provisionRequest(env: Env, req: any): Promise<string> {
         lines.push(`try { Invoke-WebRequest -UseBasicParsing -Method POST -Uri "${env.APP_URL}/api/internal/course-done?req=${req.id}&token=${encodeURIComponent(token)}" } catch {}`);
       }
     }
-    userData = `<powershell>\n${lines.join('\n')}\n</powershell>\n<persist>false</persist>`;
+    userData = `#ps1_sysnative\n${lines.join('\n')}`;
     encPassword = await encryptSecret(env.SESSION_SECRET, password);
   } else if (!isRestore) {
     // Linux: hardening (DNS filter + P2P block + hostname lock) + optional course tools.
@@ -255,24 +256,29 @@ async function provisionRequest(env: Env, req: any): Promise<string> {
     }
   }
 
-  // Restore: register an AMI from the snapshot and launch from it (disk = snapshot).
-  let amiId = os.ami;
+  // Restore: create a boot volume from the backup and launch from it (disk = backup).
+  let imageId: string | undefined = os.image;
+  let bootVolumeId: string | undefined;
   let sizeGb = storage.sizeGb;
   if (isRestore) {
     const snap = await getSnapshot(env, req.restore_snapshot_id, req.user_email);
     if (!snap?.aws_snapshot_id || snap.status !== 'completed') throw new Error('snapshot not ready for restore');
-    amiId = await registerImageFromSnapshot(env, `gitvm-restore-${req.id}`, snap.aws_snapshot_id, snap.root_device ?? '/dev/sda1', snap.architecture ?? 'x86_64');
+    bootVolumeId = await registerImageFromSnapshot(env, `gitvm-restore-${req.id}`, snap.aws_snapshot_id, snap.root_device ?? '', snap.architecture ?? '');
+    imageId = undefined; // launching from the restored boot volume
     sizeGb = Math.max(storage.sizeGb, snap.size_gb ?? 0);
   }
 
-  const kp = await createKeyPair(env, req.id, isWindows ? 'rsa' : 'ed25519');
+  const kp = await createKeyPair(env, req.id);
   const encKey = await encryptSecret(env.SESSION_SECRET, kp.privateKey);
   const { instanceId } = await launchInstance(env, {
     requestId: req.id,
-    keyName: kp.keyName,
-    instanceType: perf.instanceType,
-    amiId,
+    shape: perf.shape,
+    ocpus: perf.ocpus,
+    memoryGb: perf.memoryGb,
+    imageId,
+    bootVolumeId,
     sizeGb,
+    sshPublicKey: kp.publicKey,
     userData,
     nameTag: req.name ? `${req.name}.${req.user_email.split('@')[0]}` : null,
   });
@@ -360,7 +366,7 @@ app.get('/api/presets', (c) =>
     os: Object.values(OS),
     courses: Object.values(COURSES).map(({ id, label, description, tools }) => ({ id, label, description, tools })),
     storageUsdGbMonth: STORAGE_USD_GB_MONTH,
-    region: c.env.AWS_REGION,
+    region: c.env.OCI_REGION,
     grafanaUrl: c.env.GRAFANA_URL ?? '',
   })
 );
@@ -402,7 +408,7 @@ app.post('/api/requests', apiAuth, async (c) => {
     return c.json({ error: 'rate_limited' }, 429, { 'Retry-After': '3600' });
   }
   const id = await createRequest(
-    c.env, user.email, purpose, perf, storage, os, c.env.AWS_REGION,
+    c.env, user.email, purpose, perf, storage, os, c.env.OCI_REGION,
     start ? start.toISOString() : null, end.toISOString(), course || null
   );
   await audit(c.env, user.email, 'request.create', `req:${id}`, `${perf}/${storage}/${os}${course ? `/${course}` : ''} end:${end.toISOString()}`);
@@ -444,7 +450,7 @@ app.post('/api/requests/batch', apiAuth, async (c) => {
   const ids: number[] = [];
   for (const p of parsed) {
     const id = await createRequest(
-      c.env, user.email, p.purpose, p.perf, p.storage, p.os, c.env.AWS_REGION, p.start, p.end, p.course || null, groupId, groupName, p.restoreSnapshotId, p.name
+      c.env, user.email, p.purpose, p.perf, p.storage, p.os, c.env.OCI_REGION, p.start, p.end, p.course || null, groupId, groupName, p.restoreSnapshotId, p.name
     );
     ids.push(id);
     await audit(c.env, user.email, 'request.create', `req:${id}`, `${p.perf}/${p.storage}/${p.os}${groupId ? ` grp:${groupId}` : ''}`);
@@ -952,7 +958,7 @@ app.post('/api/trainer/batch', apiTrainer, async (c) => {
     const owner = emails[i % emails.length]; // round-robin distribution
     const name = `${baseName} ${i + 1}`;
     const id = await createRequest(
-      c.env, owner, purpose, perf, storage, os, c.env.AWS_REGION,
+      c.env, owner, purpose, perf, storage, os, c.env.OCI_REGION,
       start ? start.toISOString() : null, end.toISOString(), course || null, groupId, groupName, null, name
     );
     ids.push(id);
@@ -1125,6 +1131,15 @@ app.post('/api/admin/requests/:id/suggest', apiAdmin, async (c) => {
   await addComment(c.env, id, admin.email, `[Proposition de modification] ${note}`);
   await addNotification(c.env, r.user_email, 'suggestion', `/requests/${id}`);
   await audit(c.env, admin.email, 'request.suggest', `req:${id}`);
+  return c.json({ ok: true });
+});
+
+// Reconcile trigger for an external scheduler (GitHub Actions / uptime pinger), since
+// this worker has no Cloudflare cron (account 5-cron cap). Bearer/?token = RECONCILE_TOKEN.
+app.post('/api/internal/reconcile', async (c) => {
+  const provided = (c.req.header('authorization') ?? '').replace(/^Bearer\s+/i, '') || c.req.query('token') || '';
+  if (!c.env.RECONCILE_TOKEN || provided !== c.env.RECONCILE_TOKEN) return c.json({ error: 'unauthorized' }, 401);
+  c.executionCtx.waitUntil(runReconcile(c.env));
   return c.json({ ok: true });
 });
 
@@ -1332,6 +1347,21 @@ async function syncSnapshots(env: Env): Promise<void> {
   }
 }
 
+// Full reconcile pipeline — run by the cron (if enabled) AND by the token-gated
+// /api/internal/reconcile endpoint (the Cloudflare free plan caps the account at 5
+// cron triggers, so this worker is driven by an external scheduler hitting that route).
+async function runReconcile(env: Env): Promise<void> {
+  await reconcile(env);
+  await applySchedules(env);
+  await retryFailed(env);
+  await enforceExpiry(env);
+  await enforceIdleStop(env);
+  await syncSnapshots(env);
+  // Nightly cost-guardrail stop, folded in: fires once around 19:00 UTC.
+  const now = new Date();
+  if (now.getUTCHours() === 19 && now.getUTCMinutes() < 5) await scheduledStop(env);
+}
+
 app.onError((err, c) => {
   reportError(c.env.SENTRY_DSN, err, c.executionCtx, { path: c.req.path });
   return c.json({ error: 'internal' }, 500);
@@ -1339,20 +1369,9 @@ app.onError((err, c) => {
 
 export default {
   fetch: app.fetch,
-  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext) {
-    if (event.cron === '0 19 * * *') {
-      ctx.waitUntil(scheduledStop(env));
-    } else {
-      ctx.waitUntil(
-        (async () => {
-          await reconcile(env);
-          await applySchedules(env);
-          await retryFailed(env);
-          await enforceExpiry(env);
-          await enforceIdleStop(env);
-          await syncSnapshots(env);
-        })()
-      );
-    }
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext) {
+    // Only fires if a native Cloudflare cron is ever added (see wrangler.jsonc note).
+    // Today the reconcile pipeline is driven by POST /api/internal/reconcile instead.
+    ctx.waitUntil(runReconcile(env));
   },
 } satisfies ExportedHandler<Env>;

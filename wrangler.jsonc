@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "git-vm-portal",
+  "name": "git-vm-oracle",
   "main": "src/index.ts",
   "compatibility_date": "2025-06-01",
   "observability": { "enabled": true },
@@ -18,27 +18,29 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "git_vm_portal",
-      "database_id": "86b47d2d-62e8-4162-a3cc-f7a8a02068c6"
+      "database_name": "git_vm_oracle",
+      "database_id": "5cf6d995-097c-455c-943c-6c863b9af3e1"
     }
   ],
 
-  // Non-secret config. Secrets (AWS keys, Entra client secret, session secret)
-  // are set with `wrangler secret put` — never committed here.
+  // Non-secret config. Secrets (OCI_PRIVATE_KEY, Entra client secret, session secret,
+  // EmailJS private key) are set with `wrangler secret put` — never committed here.
   "vars": {
     "ALLOWED_EMAIL_DOMAINS": "satom.ch,git.swiss",
     "ADMIN_EMAILS": "thomas.prudhomme@satom.ch,thomas.prudhomme@git.swiss",
     "ENTRA_TENANT_ID": "33a7a298-4cf4-4f62-914a-d32bba54de5a",
-    "ENTRA_CLIENT_ID": "0bfcdbd6-a60e-49df-a5b1-80ce3bcb7126",
+    "ENTRA_CLIENT_ID": "02ba5e3a-eacf-477d-880e-0419ae5e47c7",
 
-    "AWS_REGION": "eu-central-2",
-    "AWS_AMI_ID": "ami-0fd7f34c2a7d8427b",
-    "AWS_SUBNET_ID": "subnet-0247cdf408e6fb4d1",
-    "AWS_SECURITY_GROUP_ID": "sg-0f842f10ca3c7b2d1",
-    "AWS_KEY_NAME": "",
+    "OCI_REGION": "eu-zurich-1",
+    "OCI_TENANCY_OCID": "ocid1.tenancy.oc1..aaaaaaaa2gdz6w6mdtjbi43idgq6qkdpsmbp77wmss2oyuk5qliysrqlcjua",
+    "OCI_USER_OCID": "ocid1.user.oc1..aaaaaaaal47efc44ttrktrfg6tbzd7oe6dcjcz2iupehme5i2ybwwi3xgeta",
+    "OCI_FINGERPRINT": "8f:20:d3:25:96:90:7e:4e:02:ae:79:ef:ef:12:42:a8",
+    "OCI_COMPARTMENT_OCID": "ocid1.tenancy.oc1..aaaaaaaa2gdz6w6mdtjbi43idgq6qkdpsmbp77wmss2oyuk5qliysrqlcjua",
+    "OCI_SUBNET_ID": "ocid1.subnet.oc1.eu-zurich-1.aaaaaaaabpinjthnzquazjd74puswcjw7cgu4wmcbw4es5eoljzd4wzgcmtq",
+    "OCI_AVAILABILITY_DOMAIN": "efIw:EU-ZURICH-1-AD-1",
 
-    "APP_URL": "https://git-vm-portal.thomas-prudhomme.workers.dev",
-    "GRAFANA_URL": "https://thomastp.grafana.net/d/gitvm-portal/git-vm-portal",
+    "APP_URL": "https://git-vm-oracle.thomas-prudhomme.workers.dev",
+    "GRAFANA_URL": "",
     "MAIL_ENABLED": "true",
     "SCHEDULED_STOP": "true",
     "IDLE_STOP": "true",
@@ -48,11 +50,11 @@
     "EMAILJS_PUBLIC_KEY": "KlKcUV9eCQouP22hT",
     "EMAILJS_SERVICE_ID": "service_aeuc86a",
     "EMAILJS_TEMPLATE_ID": "template_za3761l"
-  },
-
-  "triggers": {
-    // every 2 min: reconcile AWS state (provisioning->active, drift detection)
-    // daily 19:00 UTC: scheduled stop of running VMs (cost guardrail)
-    "crons": ["*/2 * * * *", "0 19 * * *"]
   }
+
+  // No "triggers"/crons: the Cloudflare free plan caps the account at 5 cron triggers
+  // and they're already used (AWS portal + others). The reconcile pipeline is driven by
+  // an external scheduler (GitHub Actions, .github/workflows/reconcile.yml) hitting
+  // POST /api/internal/reconcile (RECONCILE_TOKEN-gated). To switch back to a native
+  // cron once a slot is free / on a paid plan, add: "triggers": { "crons": ["*/2 * * * *"] }.
 }

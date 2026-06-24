@@ -179,7 +179,7 @@ export function RequestDetail() {
                 {osDef?.label ?? r.os ?? '—'}
               </span>
             </Row>
-            <Row label={t('detail.instanceType')} mono>{perfDef?.instanceType ?? r.preset}</Row>
+            <Row label={t('detail.instanceType')} mono>{perfDef?.shape ?? r.preset}</Row>
             <Row label={t('detail.cpu')}>{perfDef ? `${perfDef.vcpu} vCPU` : '—'}</Row>
             <Row label={t('detail.memory')}>{perfDef ? `${perfDef.ramGb} Go` : '—'}</Row>
             <Row label={t('detail.disk')}>{storageDef?.label ?? r.storage ?? '—'}</Row>

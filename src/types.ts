@@ -8,11 +8,14 @@ export interface Env {
   ENTRA_TENANT_ID: string;
   ENTRA_CLIENT_ID: string;
 
-  AWS_REGION: string;
-  AWS_AMI_ID: string;
-  AWS_SUBNET_ID: string;
-  AWS_SECURITY_GROUP_ID: string;
-  AWS_KEY_NAME: string;
+  // OCI (Oracle Cloud) public config
+  OCI_REGION: string; // e.g. eu-zurich-1
+  OCI_TENANCY_OCID: string;
+  OCI_USER_OCID: string;
+  OCI_FINGERPRINT: string; // API signing key fingerprint
+  OCI_COMPARTMENT_OCID: string; // where VMs/volumes live (root = tenancy)
+  OCI_SUBNET_ID: string; // public regional subnet
+  OCI_AVAILABILITY_DOMAIN: string; // e.g. "efIw:EU-ZURICH-1-AD-1"
 
   APP_URL: string;
   GRAFANA_URL?: string; // optional: link shown in the admin Monitoring tab
@@ -29,9 +32,9 @@ export interface Env {
   // Secrets (wrangler secret put ...)
   ENTRA_CLIENT_SECRET: string;
   SESSION_SECRET: string;
-  AWS_ACCESS_KEY_ID: string;
-  AWS_SECRET_ACCESS_KEY: string;
+  OCI_PRIVATE_KEY: string; // API signing key, PKCS#8 PEM
   EMAILJS_PRIVATE_KEY: string;
+  RECONCILE_TOKEN?: string; // bearer token for POST /api/internal/reconcile (external scheduler)
   GRAFANA_TOKEN?: string; // bearer token for the /api/monitoring/* endpoints (Grafana)
 }
 

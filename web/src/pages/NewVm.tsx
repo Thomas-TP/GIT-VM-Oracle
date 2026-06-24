@@ -122,7 +122,7 @@ function VmConfig({ vm, onChange, catalog, snapshots }: { vm: VmCfg; onChange: (
                 <span className="font-medium">{p.label}</span>
                 {p.recommended && <Badge tone="primary">{t('newvm.recommended')}</Badge>}
               </div>
-              <div className="mt-1 font-mono text-[11px] text-muted-foreground">{p.instanceType}</div>
+              <div className="mt-1 font-mono text-[11px] text-muted-foreground">{p.shape}</div>
               <div className="mt-1.5 text-sm">{p.vcpu} vCPU · {p.ramGb} {t('newvm.ram')}</div>
               <div className="mt-1 text-xs text-muted-foreground tabular-nums">${p.hourlyUsd.toFixed(3)}/h</div>
             </Choice>

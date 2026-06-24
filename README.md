@@ -3,11 +3,11 @@
 # 🖥️ GIT VM Portal
 
 **Plateforme self-service de provisioning de machines virtuelles**
-SSO Microsoft → demande → validation → VM AWS EC2 automatique → arrêt à l'échéance.
+SSO Microsoft → demande → validation → VM Oracle Cloud (OCI) automatique → arrêt à l'échéance.
 Le tout sur **Cloudflare Workers**.
 
-[![CI](https://github.com/Thomas-TP/GIT-VM/actions/workflows/ci.yml/badge.svg)](https://github.com/Thomas-TP/GIT-VM/actions/workflows/ci.yml)
-&nbsp;·&nbsp; **Prod** : <https://git-vm-portal.thomas-prudhomme.workers.dev>
+**Prod** : <https://git-vm-oracle.thomas-prudhomme.workers.dev>
+&nbsp;·&nbsp; Variante **OCI** (socle AWS d'origine : [`GIT-VM`](https://github.com/Thomas-TP/GIT-VM))
 
 </div>
 
@@ -44,7 +44,7 @@ Le tout sur **Cloudflare Workers**.
 | Base de données | Cloudflare **D1** (SQLite) |
 | Hébergement | Cloudflare Workers Static Assets (SPA) + Worker (API) |
 | Auth | Microsoft **Entra ID** (OIDC) |
-| Compute | **AWS EC2** (`eu-central-2` / Zurich), signé `aws4fetch` |
+| Compute | **OCI Compute** (E-Flex x86) + Block Volume + Monitoring (`eu-zurich-1` / Zurich), signé HTTP Signature RSA |
 | Email | EmailJS (REST) · Erreurs : Sentry (optionnel) |
 
 Choix d'architecture justifiés dans les [ADR](docs/adr/).
@@ -85,7 +85,7 @@ Détails et diagrammes : [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 src/            Worker Cloudflare (API, OIDC, AWS, email, D1, cron)
 migrations/     Migrations de schéma D1
 web/            SPA React (build → web/dist, servie en static assets)
-scripts/        Helpers AWS one-off (découverte AMIs, ouverture RDP, e2e…)
+scripts/        Helpers OCI one-off (_oci signature, setup réseau, découverte images, harden, budget)
 docs/           Architecture, déploiement, configuration, ADR, analyse, roadmap
 wrangler.jsonc  Config Worker + bindings
 AGENTS.md       Guide d'entrée pour agents IA & nouveaux devs
@@ -101,8 +101,8 @@ build + migrations D1 + déploiement. **Pas de `wrangler deploy` manuel.** Voir
 ## 🔐 Secrets
 
 Config publique dans `wrangler.jsonc` (`vars`). Secrets via `wrangler secret put` (jamais commités) :
-`SESSION_SECRET`, `ENTRA_CLIENT_SECRET`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-`EMAILJS_PRIVATE_KEY`. Détail, IAM, rotation : [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
+`SESSION_SECRET`, `ENTRA_CLIENT_SECRET`, `OCI_PRIVATE_KEY`, `EMAILJS_PRIVATE_KEY`, `RECONCILE_TOKEN`.
+Détail, IAM, rotation : [`docs/CONFIGURATION.md`](docs/CONFIGURATION.md).
 
 ## 📚 Documentation
 

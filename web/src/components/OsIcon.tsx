@@ -8,6 +8,7 @@ const FAM: Record<OsFamily, { bg: string; glyph: 'terminal' | 'windows' }> = {
   amazon: { bg: '#EC7211', glyph: 'terminal' },
   rocky: { bg: '#10B981', glyph: 'terminal' },
   alma: { bg: '#1F557F', glyph: 'terminal' },
+  oracle: { bg: '#C74634', glyph: 'terminal' },
   windows: { bg: '#0078D4', glyph: 'windows' },
 };
 

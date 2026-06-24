@@ -9,7 +9,9 @@ export interface User {
 export interface PerfPreset {
   id: string;
   label: string;
-  instanceType: string;
+  shape: string; // OCI shape, e.g. VM.Standard.E4.Flex
+  ocpus?: number;
+  memoryGb?: number;
   vcpu: number;
   ramGb: number;
   hourlyUsd: number;
@@ -25,12 +27,12 @@ export interface StoragePreset {
   recommended?: boolean;
   hidden?: boolean;
 }
-export type OsFamily = 'ubuntu' | 'debian' | 'amazon' | 'rocky' | 'alma' | 'windows';
+export type OsFamily = 'ubuntu' | 'debian' | 'amazon' | 'rocky' | 'alma' | 'windows' | 'oracle';
 export interface OsPreset {
   id: string;
   label: string;
   family: OsFamily;
-  ami: string;
+  image: string; // OCI platform image OCID
   sshUser: string;
   connect: 'ssh' | 'rdp';
   description?: string;

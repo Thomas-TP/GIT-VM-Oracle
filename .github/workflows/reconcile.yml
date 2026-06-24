@@ -1,0 +1,25 @@
+# Drives the OCI reconcile pipeline every 5 minutes by pinging the Worker's
+# token-gated endpoint. Needed because the Cloudflare free plan caps the account at
+# 5 cron triggers (already used), so this Worker has no native Cloudflare cron.
+#
+# Requires repo secret RECONCILE_TOKEN (same value as the Worker's RECONCILE_TOKEN).
+# GitHub Actions cron has ~5 min granularity and can be delayed under load; for a
+# tighter/again-more-reliable cadence use an external pinger (cron-job.org, UptimeRobot)
+# on the same URL instead.
+name: reconcile
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+concurrency:
+  group: reconcile
+  cancel-in-progress: false
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger reconcile
+        run: |
+          curl -fsS --retry 2 -X POST \
+            "https://git-vm-oracle.thomas-prudhomme.workers.dev/api/internal/reconcile" \
+            -H "authorization: Bearer ${{ secrets.RECONCILE_TOKEN }}"
