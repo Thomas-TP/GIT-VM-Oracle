@@ -103,7 +103,8 @@ docs/                     Architecture, déploiement, configuration, ADR, analys
 ## 6. Le pattern central : le réconciliateur
 
 **La DB = état désiré.** Faute de cron Cloudflare (plafond de **5 cron triggers/compte** atteint), un
-**planificateur externe** (GitHub Actions `.github/workflows/reconcile.yml`, ~5 min) appelle
+**planificateur externe** (GitHub Actions `.github/workflows/reconcile.yml`, ~1 min : boucle interne
+de pings sur la fenêtre cron de 5 min) appelle
 **`POST /api/internal/reconcile`** (gardé par `RECONCILE_TOKEN`) pour réconcilier le réel OCI avec la
 DB, en séquence :
 

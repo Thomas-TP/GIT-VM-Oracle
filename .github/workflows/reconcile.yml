@@ -1,11 +1,10 @@
-# Drives the OCI reconcile pipeline every 5 minutes by pinging the Worker's
-# token-gated endpoint. Needed because the Cloudflare free plan caps the account at
-# 5 cron triggers (already used), so this Worker has no native Cloudflare cron.
+# Drives the OCI reconcile pipeline ~every minute by pinging the Worker's token-gated
+# endpoint. Needed because the Cloudflare free plan caps the account at 5 cron triggers
+# (already used), so this Worker has no native Cloudflare cron.
 #
-# Requires repo secret RECONCILE_TOKEN (same value as the Worker's RECONCILE_TOKEN).
-# GitHub Actions cron has ~5 min granularity and can be delayed under load; for a
-# tighter/again-more-reliable cadence use an external pinger (cron-job.org, UptimeRobot)
-# on the same URL instead.
+# GitHub's schedule granularity is 5 min, so the job loops internally and pings every
+# ~60s across the 5-min window → effective ~1-minute cadence, self-contained & free
+# (public repo = free Actions minutes). Requires repo secret RECONCILE_TOKEN.
 name: reconcile
 on:
   schedule:
@@ -13,13 +12,18 @@ on:
   workflow_dispatch: {}
 concurrency:
   group: reconcile
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   ping:
     runs-on: ubuntu-latest
+    timeout-minutes: 6
     steps:
-      - name: Trigger reconcile
+      - name: Ping reconcile every ~60s for the 5-min window
         run: |
-          curl -fsS --retry 2 -X POST \
-            "https://git-vm-oracle.thomas-prudhomme.workers.dev/api/internal/reconcile" \
-            -H "authorization: Bearer ${{ secrets.RECONCILE_TOKEN }}"
+          for i in 1 2 3 4 5; do
+            echo "ping $i/5"
+            curl -fsS --retry 2 --max-time 30 -X POST \
+              "https://git-vm-oracle.thomas-prudhomme.workers.dev/api/internal/reconcile" \
+              -H "authorization: Bearer ${{ secrets.RECONCILE_TOKEN }}" || true
+            if [ "$i" -lt 5 ]; then sleep 60; fi
+          done
