@@ -104,7 +104,7 @@ export async function discoverAvailabilityDomain() {
 
 // Run directly (`node scripts/_oci.mjs`) to validate signing + report which services
 // the API user is authorized for. Prints each status; never throws.
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const cid = encodeURIComponent(COMPARTMENT);
   const probes = [
     ['iaas    vcns                 ', () => iaas('GET', `/20160918/vcns?compartmentId=${cid}`)],
