@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "git-vm-oracle",
+  "account_id": "7a91996559b58aa01afe79940142e9b8",
   "main": "src/index.ts",
   "compatibility_date": "2025-06-01",
   "observability": { "enabled": true },
@@ -19,7 +20,7 @@
     {
       "binding": "DB",
       "database_name": "git_vm_oracle",
-      "database_id": "5cf6d995-097c-455c-943c-6c863b9af3e1"
+      "database_id": "356eb15e-28a2-43ca-a21a-17f6ed25d3e1"
     }
   ],
 
@@ -39,7 +40,7 @@
     "OCI_SUBNET_ID": "ocid1.subnet.oc1.eu-zurich-1.aaaaaaaabpinjthnzquazjd74puswcjw7cgu4wmcbw4es5eoljzd4wzgcmtq",
     "OCI_AVAILABILITY_DOMAIN": "efIw:EU-ZURICH-1-AD-1",
 
-    "APP_URL": "https://git-vm-oracle.thomas-prudhomme.workers.dev",
+    "APP_URL": "https://git-vm-oracle.satom-openstack.workers.dev",
     "GRAFANA_URL": "",
     "MAIL_ENABLED": "true",
     "SCHEDULED_STOP": "true",
@@ -50,11 +51,12 @@
     "EMAILJS_PUBLIC_KEY": "KlKcUV9eCQouP22hT",
     "EMAILJS_SERVICE_ID": "service_aeuc86a",
     "EMAILJS_TEMPLATE_ID": "template_za3761l"
-  }
+  },
 
-  // No "triggers"/crons: the Cloudflare free plan caps the account at 5 cron triggers
-  // and they're already used (AWS portal + others). The reconcile pipeline is driven by
-  // an external scheduler (GitHub Actions, .github/workflows/reconcile.yml) hitting
-  // POST /api/internal/reconcile (RECONCILE_TOKEN-gated). To switch back to a native
-  // cron once a slot is free / on a paid plan, add: "triggers": { "crons": ["*/2 * * * *"] }.
+  "triggers": {
+    // every 2 min: reconcile OCI state (provisioning->active, drift detection).
+    // Native Cloudflare cron — this account (satom.ch) has free cron-trigger slots.
+    // The nightly cost-guardrail stop (~19:00 UTC) is folded into runReconcile().
+    "crons": ["*/2 * * * *"]
+  }
 }
