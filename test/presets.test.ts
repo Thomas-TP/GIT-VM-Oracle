@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PERF, isValidPerf, isValidStorage, isValidOs, estimateMonthlyUsd, STORAGE_USD_GB_MONTH } from '../src/presets';
+import { PERF, STORAGE, isValidPerf, isValidStorage, isValidOs, estimateMonthlyUsd, STORAGE_USD_GB_MONTH } from '../src/presets';
 
 describe('preset validators', () => {
   it('accepts known ids and rejects unknown', () => {
@@ -13,8 +13,8 @@ describe('preset validators', () => {
 
 describe('cost estimate', () => {
   it('sums compute + storage for the month', () => {
-    const c = estimateMonthlyUsd('eco', 's20');
-    expect(c).toBeCloseTo(PERF.eco.hourlyUsd * 730 + 20 * STORAGE_USD_GB_MONTH, 4);
+    const c = estimateMonthlyUsd('eco', 's50');
+    expect(c).toBeCloseTo(PERF.eco.hourlyUsd * 730 + STORAGE.s50.sizeGb * STORAGE_USD_GB_MONTH, 4);
   });
   it('returns 0 for invalid composition', () => {
     expect(estimateMonthlyUsd('bad', 'bad')).toBe(0);
