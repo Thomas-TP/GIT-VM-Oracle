@@ -28,7 +28,7 @@ monitoring/                   Grafana local (docker-compose, dashboard, datasour
 docs/
   ARCHITECTURE.md             Architecture, flux, modèle de données, sécurité, API
   DEPLOYMENT.md               Pipeline CI/CD (Cloudflare Workers Builds), publication, rollback
-  CONFIGURATION.md            Variables, secrets, IAM AWS, Entra, EmailJS, rotation
+  CONFIGURATION.md            Variables, secrets, IAM OCI, Entra, EmailJS, rotation
   adr/                        Décisions d'architecture (ADR 0001 → 0008)
   analyse/                    Notes d'analyse (état des lieux, dette technique)
 ```

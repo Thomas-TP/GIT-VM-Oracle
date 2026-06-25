@@ -9,7 +9,7 @@ sécurité (critère 20 %). La stack est serverless (pas de serveur où héberge
 
 ## Décision
 
-- Secrets d'exécution (clés AWS, secret Entra, `SESSION_SECRET`, clé EmailJS) via
+- Secrets d'exécution (identifiants OCI, secret Entra, `SESSION_SECRET`, clé EmailJS) via
   **Cloudflare Wrangler Secrets** (chiffrés côté plateforme, jamais commités, injectés à l'exécution).
 - Données sensibles au repos (**clés privées SSH**) **chiffrées AES-GCM** en DB, clé dérivée de
   `SESSION_SECRET` → une fuite de la base seule ne révèle aucune clé.

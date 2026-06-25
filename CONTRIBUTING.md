@@ -37,7 +37,7 @@ npm --prefix web run build       # build SPA
 ## Conventions de code
 
 - **TypeScript strict** des deux côtés. Pas de `any` gratuit.
-- **Backend** : Hono, pas de dépendances lourdes, appels AWS via `aws4fetch`.
+- **Backend** : Hono, pas de dépendances lourdes, appels OCI via `Web Crypto (RSA-SHA256)`.
 - **Frontend** : composants fonctionnels, TanStack Query pour les données, primitives UI maison
   (`web/src/ui.tsx`) — pas de librairie de composants externe.
 - **i18n** : `fr` est la source ; `en: typeof fr` → toute clé ajoutée à `fr` doit l'être à `en`.
@@ -55,7 +55,7 @@ corps si non évident. Exemple : `feat(web): page de création de VM en cartes`.
 - Migrations **additives** uniquement (`ALTER TABLE … ADD COLUMN`), jamais de reconstruction de table
   (conflits de clés étrangères sur D1 remote).
 - Nouvelle migration : `migrations/NNNN_nom.sql`. Elle sera appliquée automatiquement au déploiement
-  (deploy command Cloudflare). En local : `npx wrangler d1 migrations apply git_vm_portal --local`.
+  (deploy command Cloudflare). En local : `npx wrangler d1 migrations apply git_vm_oracle --local`.
 
 ## Décisions d'architecture (ADR)
 

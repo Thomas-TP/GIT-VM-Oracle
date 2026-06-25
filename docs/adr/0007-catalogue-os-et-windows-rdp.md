@@ -10,19 +10,19 @@ Debian 12) et passait par une **modale** peu lisible. Demande produit : refonte 
 connexion** (MobaXterm, Termius) intégrées au portail.
 
 Contraintes techniques découvertes :
-- Le pipeline existant = **SSH + clé ed25519** ; le security group n'ouvre que **tcp/22**.
+- Le pipeline existant = **SSH + clé RSA** ; le security list n'ouvre que **tcp/22**.
 - **Termius** ne gère **que SSH** (pas de RDP) ; MobaXterm gère SSH **et** RDP.
-- Les secrets AWS vivent dans Cloudflare → AMIs vérifiés via `scripts/aws-amis.mjs`
+- Les secrets OCI vivent dans Cloudflare → AMIs vérifiés via `scripts/oci-images.mjs`
   (DescribeImages, lecture seule) plutôt que devinés.
 
 ## Décision
 
-1. **Catalogue d'OS** (AMI concrets `eu-central-2`, vérifiés) : Ubuntu 24.04 LTS (par défaut),
-   Debian 12, **Amazon Linux 2023**, **Rocky Linux 9**, **AlmaLinux 9**, **Windows Server 2022**.
+1. **Catalogue d'OS** (AMI concrets `eu-zurich-1`, vérifiés) : Ubuntu 24.04 LTS (par défaut),
+   Debian 12, **Oracle Linux 9**, **Rocky Linux 9**, **AlmaLinux 9**, **Windows Server 2022**.
    Ubuntu 22.04 conservé **masqué** (`hidden`) pour résoudre les demandes existantes sans l'afficher.
    Fedora écarté (aucune AMI publiée par le Fedora Project dans la région).
 2. **Windows = RDP**, pas SSH : mot de passe Administrateur **généré au provisioning**, injecté via
-   **UserData (EC2Launch)**, stocké **chiffré AES-GCM** (même mécanisme que les clés SSH, cf.
+   **UserData (cloudbase-init)**, stocké **chiffré AES-GCM** (même mécanisme que les clés SSH, cf.
    [ADR 0006](0006-gestion-des-secrets.md)), révélé au seul propriétaire/admin via une route auditée.
 3. **Guide de connexion adaptatif** dans le détail de la VM : SSH → MobaXterm / Termius / Terminal ;
    RDP → MobaXterm / Bureau à distance (Termius explicitement marqué non supporté).
@@ -36,9 +36,9 @@ Contraintes techniques découvertes :
 - (+) Windows fonctionne sans dépendre du déchiffrement `GetPasswordData` (infaisable dans un Worker :
   WebCrypto ne fait pas de RSAES-PKCS1-v1_5).
 - (+) Le chemin Linux existant **n'est pas modifié** (mêmes AMIs, même flux SSH).
-- (−) **RDP nécessite d'ouvrir tcp/3389** sur le security group partagé. Exposition `0.0.0.0/0`
+- (−) **RDP nécessite d'ouvrir tcp/3389** sur le security list partagé. Exposition `0.0.0.0/0`
   acceptée pour la démo, **à restreindre** à une plage IP GIT en production (port ouvert via
-  `scripts/aws-open-rdp.mjs`, idempotent). Les hôtes Linux partagent ce SG mais n'écoutent pas sur 3389.
+  `scripts/oci-setup.mjs`, idempotent). Les hôtes Linux partagent ce SG mais n'écoutent pas sur 3389.
 - (−) La migration 0006 doit être appliquée **avant** le déploiement (le code lit `connect_method` /
   `admin_password`) — voir runbook.
 

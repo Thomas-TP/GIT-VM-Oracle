@@ -11,10 +11,10 @@ Dashboard Grafana **en ligne** qui lit les métriques du portail via des endpoin
 1. Crée un compte gratuit sur <https://grafana.com> → une instance Grafana Cloud.
 2. **Connections → Add new connection → Infinity** (installe la source de données, dispo en gratuit).
    - Dans la config Infinity, onglet *Security* : autorise l'hôte
-     `https://git-vm-portal.thomas-prudhomme.workers.dev`.
+     `https://git-vm-oracle.satom-openstack.workers.dev`.
 3. **Dashboards → New → Import** → charge [`grafana/dashboards/git-vm-portal.json`](grafana/dashboards/git-vm-portal.json).
 4. En haut du dashboard, renseigne les deux variables :
-   - **Portal URL** : `https://git-vm-portal.thomas-prudhomme.workers.dev` (pré-rempli)
+   - **Portal URL** : `https://git-vm-oracle.satom-openstack.workers.dev` (pré-rempli)
    - **Token** : la valeur du secret `GRAFANA_TOKEN` (déjà défini côté Cloudflare).
 5. (Optionnel) copie l'URL de ton dashboard dans la variable Cloudflare `GRAFANA_URL` :
    l'onglet **Monitoring** de l'admin y renverra directement.

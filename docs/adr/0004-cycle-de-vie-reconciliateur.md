@@ -24,7 +24,7 @@ travail des étudiants). Le projet a déjà un **réconciliateur cron** (`*/2 mi
 
 ## Justification
 
-- L'auto-**stop** ramène le coût compute à ≈ 0 (seul l'EBS reste facturé) tout en **préservant les
+- L'auto-**stop** ramène le coût compute à ≈ 0 (seul l'Block Volume reste facturé) tout en **préservant les
   données** → répond à l'exigence métier *coûts* sans perte de travail.
 - Réutilise le pattern réconciliateur existant → effort et risque minimaux.
 
@@ -39,7 +39,7 @@ Le cahier exige la *destruction* automatique. Choisir le *stop* est un **écart 
 
 - (+) « Aucune machine sans date de fin » garanti côté serveur ; coût compute borné.
 - (+) Pas de perte de données accidentelle.
-- (−) Le stockage EBS des VM expirées continue d'être facturé (faible) → prévoir une purge manuelle/règle.
+- (−) Le stockage Block Volume des VM expirées continue d'être facturé (faible) → prévoir une purge manuelle/règle.
 - (−) Écart documenté au Must M8 (voir ci-dessus).
 - Stocker les dates en **UTC**, convertir à l'affichage.
 

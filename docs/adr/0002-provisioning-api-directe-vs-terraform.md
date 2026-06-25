@@ -1,19 +1,19 @@
-# ADR 0002 — Provisioning par API AWS directe + module Terraform documenté
+# ADR 0002 — Provisioning par API OCI directe + module Terraform documenté
 
 **Statut** : Acté (2026-06-19)
 
 ## Contexte
 
 Le Must M6 exige un « provisioning automatisé (Infrastructure as Code) ». L'implémentation
-actuelle crée les VM par **appels API EC2 directs** depuis le Worker (`aws4fetch`). Un Cloudflare
+actuelle crée les VM par **appels API OCI directs** depuis le Worker (`Web Crypto (RSA-SHA256)`). Un Cloudflare
 Worker **ne peut pas exécuter de binaire** (`terraform`/`tofu`/`ansible`) : il faudrait un runner
 externe (CI, conteneur) pour de la « vraie » IaC déclarative.
 
 ## Décision
 
-1. **Le chemin live reste l'API AWS directe** depuis le Worker (provisioning à l'approbation).
+1. **Le chemin live reste l'API OCI directe** depuis le Worker (provisioning à l'approbation).
 2. Nous fournissons **en parallèle un module Terraform/OpenTofu** (`infra/`) reproduisant la même
-   VM (instance, EBS, SG, clé), **documenté et testé**, pour : (a) cocher l'exigence IaC au sens
+   VM (instance, Block Volume, SG, clé), **documenté et testé**, pour : (a) cocher l'exigence IaC au sens
    du marché, (b) servir de référence/plan B, (c) être défendu en revue d'archi.
 
 ## Justification

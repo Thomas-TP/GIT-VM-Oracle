@@ -12,10 +12,10 @@ Enjeu : la doc pèse **20 %** (réutilisabilité) et la présentation **10 %**. 
 
 Règles :
 - Toute doc en **français**, claire, orientée action, testable (commandes copiables).
-- Le **README « from zero »** doit refléter la **stack réelle** (AWS + Cloudflare Workers + D1),
+- Le **README « from zero »** doit refléter la **stack réelle** (OCI + Cloudflare Workers + D1),
   pas l'ancien plan Infomaniak. Inclure : prérequis, secrets, migrations, déploiement, vérif.
 - **Runbook** : panne de provisioning, ajout d'un template/cours (= ajouter un rôle Ansible),
-  demande bloquée, rotation des secrets, risque parsing XML EC2, restauration plan B.
+  demande bloquée, rotation des secrets, risque parsing XML OCI, restauration plan B.
 - **Guides** : un par rôle (étudiant / formateur / validateur), avec captures si possible.
 - **Script de démo** : chronométré < 10 min, couvrant le parcours imposé
   (demande → validation → notification → provisioning → **outils installés** → **destruction programmée**).

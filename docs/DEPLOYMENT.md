@@ -10,7 +10,7 @@
 1. Travaille sur une **branche**, ouvre une **PR**, fais passer la CI (typecheck/lint/test/build).
 2. **Merge sur `main`**.
 3. **Cloudflare Workers Builds** prend le relais automatiquement : build → migrations D1 → déploiement.
-4. Vérifie en live : `curl https://git-vm-portal.thomas-prudhomme.workers.dev/api/presets`.
+4. Vérifie en live : `curl https://git-vm-oracle.satom-openstack.workers.dev/api/presets`.
 
 > ❌ **Ne lance pas `wrangler deploy` à la main** en fonctionnement normal : Cloudflare le fait.
 > Un déploiement manuel écraserait/dupliquerait le déploiement géré.
@@ -67,13 +67,13 @@ avant le fallback SPA).
 
 ```bash
 # Le catalogue public reflète le code déployé
-curl https://git-vm-portal.thomas-prudhomme.workers.dev/api/presets
+curl https://git-vm-oracle.satom-openstack.workers.dev/api/presets
 
 # Logs live (debug)
-npx wrangler tail git-vm-portal --format pretty
+npx wrangler tail git-vm-oracle --format pretty
 
 # Santé
-curl https://git-vm-portal.thomas-prudhomme.workers.dev/healthz   # {"ok":true}
+curl https://git-vm-oracle.satom-openstack.workers.dev/healthz   # {"ok":true}
 ```
 
 ## 6. Rollback
@@ -104,9 +104,9 @@ Déjà fait pour cet environnement, documenté pour reproductibilité :
 1. **D1** : `wrangler d1 create git_vm_oracle` → reporter l'`database_id` dans `wrangler.jsonc`.
 2. **Migrations** : `wrangler d1 migrations apply git_vm_oracle --remote`.
 3. **Secrets** : `wrangler secret put <NAME>` pour chacun (voir [CONFIGURATION.md](CONFIGURATION.md)).
-4. **Réseau AWS** : subnet + security group (SSH 22). Pour Windows : `node scripts/aws-open-rdp.mjs`
+4. **Réseau OCI** : subnet + security list (SSH 22). Pour Windows : `node scripts/oci-setup.mjs`
    (ouvre 3389 — **à restreindre** à une plage IP en prod).
-5. **AMIs** : `node scripts/aws-amis.mjs` pour récupérer/rafraîchir les IDs `eu-central-2`.
+5. **AMIs** : `node scripts/oci-images.mjs` pour récupérer/rafraîchir les IDs `eu-zurich-1`.
 6. **Entra** : redirect URI = `https://<domaine>/auth/callback` (voir CONFIGURATION.md).
 7. **Cloudflare Build** : connecter le repo, renseigner build/deploy commands (§3).
 
@@ -114,13 +114,13 @@ Déjà fait pour cet environnement, documenté pour reproductibilité :
 
 | Cron | Action |
 |---|---|
-| `*/2 * * * *` | réconciliation AWS↔DB + retries + échéances |
+| `*/2 * * * *` | réconciliation OCI↔DB + retries + échéances |
 | `0 19 * * *` (UTC) | extinction des VM running (garde-fou coûts) |
 
 Définis dans `wrangler.jsonc` → `triggers.crons`, gérés par `scheduled()` dans `src/index.ts`.
 
 ## 10. Domaine
 
-Prod sur `*.workers.dev` : `https://git-vm-portal.thomas-prudhomme.workers.dev` (= `APP_URL`).
+Prod sur `*.workers.dev` : `https://git-vm-oracle.satom-openstack.workers.dev` (= `APP_URL`).
 Pour un domaine custom : ajouter une route/Custom Domain au Worker dans Cloudflare et mettre à jour
 `APP_URL` **et** la redirect URI Entra.

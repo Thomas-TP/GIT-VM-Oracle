@@ -12,7 +12,7 @@
 - **Secrets** (sensibles) → **Cloudflare Wrangler Secrets** (`wrangler secret put`). **Jamais commités.**
 - **En local** → fichier `.dev.vars` (ignoré par Git) pour vars + secrets de dev.
 
-> 🚫 **Aucun secret en clair dans le repo, les logs, les commits ou le chat.** Les scripts AWS lisent
+> 🚫 **Aucun secret en clair dans le repo, les logs, les commits ou le chat.** Les scripts OCI lisent
 > les creds depuis l'environnement, jamais en dur. Si on te transmet une clé, utilise-la en local et
 > **fais-la roter ensuite**.
 
@@ -23,13 +23,15 @@
 | `ALLOWED_EMAIL_DOMAINS` | `satom.ch,git.swiss` | Domaines email autorisés à se connecter |
 | `ADMIN_EMAILS` | `thomas.prudhomme@satom.ch,…` | Admins « bootstrap » (toujours admin) |
 | `ENTRA_TENANT_ID` | `33a7a298-…` | Tenant Entra ID |
-| `ENTRA_CLIENT_ID` | `0bfcdbd6-…` | App registration Entra |
-| `AWS_REGION` | `eu-central-2` | Région EC2 (Zurich) |
-| `AWS_SUBNET_ID` | `subnet-0247cdf4…` | Subnet des VM |
-| `AWS_SECURITY_GROUP_ID` | `sg-0f842f10…` | Security group partagé (SSH 22, RDP 3389) |
-| `AWS_AMI_ID` | `ami-0fd7f34c…` | AMI legacy par défaut (les OS du catalogue sont dans `src/presets.ts`) |
-| `AWS_KEY_NAME` | *(vide)* | Réservé ; les clés sont créées par VM |
-| `APP_URL` | `https://git-vm-portal.…workers.dev` | URL publique (redirects, emails) |
+| `ENTRA_CLIENT_ID` | `02ba5e3a-…` | App registration Entra (app GIT-VM-Oracle) |
+| `OCI_REGION` | `eu-zurich-1` | Région OCI (Zurich) |
+| `OCI_TENANCY_OCID` | `ocid1.tenancy.oc1..…` | Tenancy OCI |
+| `OCI_USER_OCID` | `ocid1.user.oc1..…` | Utilisateur API OCI (signature) |
+| `OCI_FINGERPRINT` | `8f:20:…:42:a8` | Empreinte de la clé API OCI |
+| `OCI_COMPARTMENT_OCID` | `ocid1.tenancy.oc1..…` | Compartiment des VM/volumes (racine = tenancy) |
+| `OCI_SUBNET_ID` | `ocid1.subnet.oc1.eu-zurich-1.…` | Subnet public régional des VM |
+| `OCI_AVAILABILITY_DOMAIN` | `efIw:EU-ZURICH-1-AD-1` | Availability domain de lancement |
+| `APP_URL` | `https://git-vm-oracle.satom-openstack.workers.dev` | URL publique (callback cours, emails) |
 | `GRAFANA_URL` | *(vide)* | Lien Grafana affiché dans l'onglet Monitoring (admin) |
 | `MAIL_ENABLED` | `true` | Active l'envoi EmailJS |
 | `SCHEDULED_STOP` | `true` | Active l'extinction nocturne (cron 19 h UTC) |
@@ -44,18 +46,18 @@
 |---|---|---|
 | `SESSION_SECRET` | aléatoire fort (≥ 32 octets) | Signe les JWT de session **ET** dérive la clé AES-GCM de chiffrement |
 | `ENTRA_CLIENT_SECRET` | Entra → Certificates & secrets | Échange du code OIDC contre l'id_token |
-| `AWS_ACCESS_KEY_ID` | IAM user dédié | Auth API EC2 |
-| `AWS_SECRET_ACCESS_KEY` | IAM user dédié | Auth API EC2 |
+| `OCI_PRIVATE_KEY` | Clé API OCI (PKCS#8 PEM) | Signe les appels API OCI (HTTP Signature RSA-SHA256) |
 | `EMAILJS_PRIVATE_KEY` | EmailJS → Account → API Keys | Auth serveur EmailJS |
+| `RECONCILE_TOKEN` | aléatoire fort | Bearer du déclencheur manuel `POST /api/internal/reconcile` + `oci-selftest` |
 | `GRAFANA_TOKEN` | aléatoire fort (optionnel) | Bearer des endpoints `/api/monitoring/*` (Grafana, cf. [monitoring/](../monitoring/README.md)). Non défini → endpoints `503`. |
 
 ```bash
 # Définir / mettre à jour un secret (prod)
 npx wrangler secret put SESSION_SECRET
 npx wrangler secret put ENTRA_CLIENT_SECRET
-npx wrangler secret put AWS_ACCESS_KEY_ID
-npx wrangler secret put AWS_SECRET_ACCESS_KEY
+Get-Content -Raw cle-api-oci.pem | npx wrangler secret put OCI_PRIVATE_KEY   # PEM multi-ligne
 npx wrangler secret put EMAILJS_PRIVATE_KEY
+npx wrangler secret put RECONCILE_TOKEN
 
 # Lister les secrets définis (noms uniquement)
 npx wrangler secret list
@@ -71,69 +73,53 @@ Fichier `.dev.vars` à la racine (déjà dans `.gitignore`) :
 ```ini
 SESSION_SECRET="dev-only-change-me-0123456789abcdef"
 ENTRA_CLIENT_SECRET="..."
-AWS_ACCESS_KEY_ID="..."
-AWS_SECRET_ACCESS_KEY="..."
+OCI_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 EMAILJS_PRIVATE_KEY="..."
+RECONCILE_TOKEN="..."
 ```
 
 `wrangler dev` charge `.dev.vars` automatiquement. Pour les scripts `scripts/*.mjs`, exporter les
-variables AWS dans le shell (PowerShell) :
+variables OCI dans le shell (PowerShell) :
 
 ```powershell
-$env:AWS_ACCESS_KEY_ID='...'; $env:AWS_SECRET_ACCESS_KEY='...'
-$env:AWS_REGION='eu-central-2'; $env:AWS_SECURITY_GROUP_ID='sg-0f842f10ca3c7b2d1'
-node scripts/aws-amis.mjs
+$env:OCI_TENANCY='ocid1.tenancy.oc1..…'; $env:OCI_USER='ocid1.user.oc1..…'
+$env:OCI_FINGERPRINT='8f:20:…:42:a8'; $env:OCI_REGION='eu-zurich-1'
+$env:OCI_PRIVATE_KEY_FILE='C:\chemin\vers\cle-api-oci.pem'   # ou $env:OCI_PRIVATE_KEY (PEM)
+node scripts/oci-images.mjs
 ```
 
-## 5. AWS IAM
+## 5. OCI IAM
 
-**Compte** : `437659978697` · **Région** : `eu-central-2`.
+**Tenancy** : `ocid1.tenancy.oc1..…` · **Région** : `eu-zurich-1` · **Compartiment** : racine (tenancy).
 
-### 5.1 Permissions du Worker (runtime)
+Le Worker signe les appels OCI avec une **clé API** rattachée à un utilisateur OCI (pas de clé
+symétrique de type access-key/secret). Politique minimale du **groupe** de cet utilisateur (Console → Identity →
+Policies) :
 
-Politique minimale pour le user IAM dont les clés sont dans les secrets Cloudflare :
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [{
-    "Effect": "Allow",
-    "Action": [
-      "ec2:RunInstances",
-      "ec2:DescribeInstances",
-      "ec2:DescribeImages",
-      "ec2:TerminateInstances",
-      "ec2:StartInstances",
-      "ec2:StopInstances",
-      "ec2:RebootInstances",
-      "ec2:CreateKeyPair",
-      "ec2:DeleteKeyPair",
-      "ec2:CreateTags"
-    ],
-    "Resource": "*"
-  }]
-}
+```
+Allow group <grp> to manage instance-family       in tenancy
+Allow group <grp> to manage volume-family         in tenancy
+Allow group <grp> to use    virtual-network-family in tenancy
+Allow group <grp> to read   metrics               in tenancy
 ```
 
-### 5.2 Permissions des scripts d'admin (one-off)
+### 5.1 Permissions supplémentaires (one-off / optionnel)
 
-`scripts/aws-amis.mjs` et `scripts/aws-open-rdp.mjs` nécessitent en plus :
+- **Création réseau** (`scripts/oci-setup.mjs`) : `manage virtual-network-family in tenancy`.
+- **Budget** (`scripts/oci-budget.mjs`) : `manage usage-budgets in tenancy` (sinon créer le budget
+  dans la Console : Billing & Cost Management → Budgets).
+- **Availability domains** : `inspect availability-domains in tenancy` — sinon l'AD est découverte
+  automatiquement via le service **Limits** (cf. `scripts/_oci.mjs`).
 
-```json
-{ "Effect": "Allow",
-  "Action": ["ec2:DescribeSecurityGroups", "ec2:AuthorizeSecurityGroupIngress"],
-  "Resource": "*" }
-```
-
-> Bonne pratique : un IAM user **distinct** pour ces scripts (creds locaux, jamais dans Cloudflare),
-> séparé du user runtime du Worker.
+> La **clé privée API** (PKCS#8 PEM) sert au runtime (secret `OCI_PRIVATE_KEY`) **et** aux scripts
+> locaux (`OCI_PRIVATE_KEY_FILE`). Jamais commitée ; à roter en cas de fuite.
 
 ## 6. Microsoft Entra ID
 
 App registration (Azure Portal → Entra ID → App registrations) :
 
 1. **Redirect URI** (type *Web*) : `https://<APP_URL>/auth/callback`
-   (prod : `https://git-vm-portal.thomas-prudhomme.workers.dev/auth/callback`).
+   (prod : `https://git-vm-oracle.satom-openstack.workers.dev/auth/callback`).
 2. **Client ID** → `ENTRA_CLIENT_ID` (var). **Tenant ID** → `ENTRA_TENANT_ID` (var).
 3. **Client secret** (Certificates & secrets) → `ENTRA_CLIENT_SECRET` (secret).
 4. **Permissions** : `openid`, `profile`, `email` (scopes OIDC standard).
@@ -152,7 +138,7 @@ Mettre `MAIL_ENABLED=false` pour désactiver proprement (les envois sont alors l
 
 | Credential | Procédure |
 |---|---|
-| **Clé AWS** | IAM → créer une nouvelle paire → `wrangler secret put AWS_ACCESS_KEY_ID` + `AWS_SECRET_ACCESS_KEY` → re-déployer → **supprimer** l'ancienne clé. |
+| **Clé API OCI** | OCI → User → API Keys → ajouter une nouvelle clé → `wrangler secret put OCI_PRIVATE_KEY` (+ mettre à jour la var `OCI_FINGERPRINT`) → re-déployer → **supprimer** l'ancienne clé. |
 | **Secret Entra** | Entra → nouveau secret → `wrangler secret put ENTRA_CLIENT_SECRET` → re-déployer → supprimer l'ancien. |
 | **EmailJS** | Régénérer la clé privée → `wrangler secret put EMAILJS_PRIVATE_KEY`. |
 | **`SESSION_SECRET`** | Générer une nouvelle valeur → `wrangler secret put` → **déconnecte tout le monde** et rend les clés/mots de passe stockés illisibles (à re-télécharger / re-provisionner). À éviter sauf compromission. |

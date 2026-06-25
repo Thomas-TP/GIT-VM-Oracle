@@ -34,19 +34,19 @@ la marge. Choix structurants :
    allowlist (`scripts/oci-harden.mjs`).
 5. **D1** : on **conserve les noms de colonnes** `aws_instance_id` / `aws_snapshot_id` (on y stocke des
    OCID). Règle « migrations additives uniquement » respectée — aucune reconstruction de table.
-6. **Pas de cron Cloudflare** : le plan gratuit plafonne le **compte** à **5 cron triggers** (déjà
-   consommés). Le réconciliateur est déclenché par un **planificateur externe** (GitHub Actions,
-   `.github/workflows/reconcile.yml`, toutes les 5 min) qui appelle **`POST /api/internal/reconcile`**
-   (gardé par `RECONCILE_TOKEN`). `scheduled()` reste en place si un cron natif est réactivé un jour.
+6. **Cron natif Cloudflare** : le worker est déployé sur le compte **satom.ch** (qui a des slots de cron
+   libres) avec une **cron `*/2 * * * *`** exécutant `runReconcile()`. Le compte git.swiss d'origine était
+   plafonné à **5 cron triggers** (déjà consommés) → d'où le déménagement de compte. `POST
+   /api/internal/reconcile` (gardé par `RECONCILE_TOKEN`) reste un déclencheur manuel de secours.
 
 ## Conséquences
 
 - (+) Parité fonctionnelle complète, à côté du projet AWS, sans modifier ce dernier.
-- (+) Aucune dépendance runtime ajoutée (`aws4fetch` retiré ; tout en Web Crypto).
+- (+) Aucune dépendance runtime ajoutée (`aws4fetch` retiré ; signature OCI faite en Web Crypto).
 - (+) Le « jamais débité » repose sur le **mode crédits/Free Tier** du compte OCI (ne pas passer en
   Pay As You Go) ; budget + alertes 20/50/100 CHF en complément (`scripts/oci-budget.mjs`).
-- (−) Le réconciliateur dépend d'un pinger externe (granularité ~5 min, GitHub Actions parfois
-  retardé). Réversible : ajouter un cron natif si un slot se libère / sur plan payant.
+- (+) Réconciliateur fiable via **cron natif 2 min** (compte satom.ch). L'essai initial sur git.swiss
+  via GitHub Actions était throttlé à plusieurs heures — abandonné au profit du cron natif.
 - (−) `inspect availability-domains` et `manage usage-budgets` ne sont pas accordés à l'utilisateur API
   → l'AD est découverte via le service **Limits** (`scripts/_oci.mjs`), et le budget se crée à la main
   dans la Console (ou après ajout de la policy IAM).
@@ -57,5 +57,6 @@ la marge. Choix structurants :
   installeurs de cours en arm64. Écarté au profit de x86 AMD Flex (parité).
 - **Terraform / SDK OCI** : même raisonnement qu'[ADR 0002](0002-provisioning-api-directe-vs-terraform.md)
   (API REST directe, pas de runtime lourd dans le Worker).
-- **Cron natif Cloudflare** : impossible (plafond de 5 cron triggers/compte atteint). Pinger externe
-  retenu.
+- **GitHub Actions comme planificateur** : essayé (compte git.swiss plafonné à 5 crons) mais les runs
+  planifiés sont throttlés (plusieurs heures) → abandonné. **Déménagement sur le compte satom.ch** avec
+  cron natif `*/2` retenu.

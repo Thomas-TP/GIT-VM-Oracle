@@ -60,7 +60,7 @@ npx wrangler deploy             # applique la nouvelle config + assets
 ```bash
 curl -sS -D - -o /dev/null --max-redirs 0 \
   -H 'Accept: text/html' -H 'Sec-Fetch-Mode: navigate' \
-  https://git-vm-portal.thomas-prudhomme.workers.dev/auth/login | grep -iE 'HTTP/|location'
+  https://git-vm-oracle.satom-openstack.workers.dev/auth/login | grep -iE 'HTTP/|location'
 # Attendu : HTTP/1.1 302 + Location: https://login.microsoftonline.com/...
 ```
 

@@ -45,12 +45,12 @@
 
 ### D7. Monitoring des ressources absent
 - **Impact** : Must M11 (partie « ressources ») + critère Monitoring (20 %).
-- **Action rapide** : CloudWatch basic CPU lu via API et affiché. **Action « pro »** : `node_exporter`
+- **Action rapide** : OCI Monitoring basic CPU lu via API et affiché. **Action « pro »** : `node_exporter`
   via cloud-init + mini Prometheus + Grafana (bonus archi, open source, valorisé marché). **Effort : M→L.**
 
 ### D8. Isolation réseau non segmentée
 - **Impact** : Must M10 (partiel).
-- **Action** : un **security group par classe/`group_id`** créé à la demande groupée ; documenter
+- **Action** : un **security list par classe/`group_id`** créé à la demande groupée ; documenter
   le modèle d'isolation. **Effort : M.**
 
 ### D9. Dashboard coûts par cours
@@ -63,7 +63,7 @@
 |---|---|---|:--:|
 | D10 | Extinction week-end + redémarrage matinal | Affiner les crons (jour/heure) | S |
 | D11 | Notif avant échéance (J-1) | Email depuis `reconcile()` quand `end_date - now < 24h` | XS |
-| D12 | Parsing XML EC2 par regex (`aws.ts`) | Fragile si AWS change le format ; OK pour le hackathon, **documenter le risque** dans le runbook | XS (doc) |
+| D12 | ~~Parsing XML par regex~~ — **résolu** : le client OCI (`oci.ts`) parse du **JSON natif** | Plus de parsing XML fragile depuis la bascule OCI | ✅ |
 | D13 | `start/stop` n'attendent pas l'état réel | Déjà rattrapé par le réconciliateur ; OK | — |
 | D14 | Secrets : pas de rotation | Documenter la procédure de rotation `wrangler secret` | XS |
 | D15 | Tests : couverture limitée (crypto, presets) | Ajouter tests sur le cycle de vie (dates, auto-destroy) | M |
@@ -71,9 +71,9 @@
 
 ## Risques transverses
 
-- **R1 — Démo live** : un appel AWS qui échoue en direct = démo cassée. → **Plan B obligatoire**
+- **R1 — Démo live** : un appel OCI qui échoue en direct = démo cassée. → **Plan B obligatoire**
   (vidéo + env. de secours pré-provisionné). Garde-le à jour dès maintenant.
-- **R2 — Quotas/coûts AWS** : surveiller le nombre d'instances ; l'auto-destroy + le stop nocturne
+- **R2 — Quotas/coûts OCI** : surveiller le nombre d'instances ; l'auto-destroy + le stop nocturne
   sont les garde-fous. Vérifier les limites du compte avant la démo.
 - **R3 — Git local non initialisé** : le repo téléchargé n'a pas de `.git`. Reconnecter au remote
   GitHub avant de committer (voir roadmap J1).
