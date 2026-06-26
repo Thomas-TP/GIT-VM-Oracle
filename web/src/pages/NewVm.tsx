@@ -181,22 +181,27 @@ function VmConfig({ vm, onChange, catalog, snapshots }: { vm: VmCfg; onChange: (
 
       <Section n={4} title={t('newvm.course')} hint={t('newvm.courseHint')}>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Choice selected={vm.course === ''} onClick={() => onChange({ course: '' })}>
+          <Choice selected={!vm.course} onClick={() => onChange({ course: '' })}>
             <div className="font-medium">{t('newvm.courseNone')}</div>
             <div className="mt-0.5 text-xs text-muted-foreground">{t('newvm.courseNoneHint')}</div>
           </Choice>
-          {catalog.courses.map((c) => (
-            <Choice key={c.id} selected={vm.course === c.id} onClick={() => onChange({ course: c.id })}>
-              <div className="font-medium">{c.label}</div>
-              <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{c.description}</div>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {c.tools.slice(0, 6).map((tool) => (
-                  <span key={tool} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{tool}</span>
-                ))}
-                {c.tools.length > 6 && <span className="text-[10px] text-muted-foreground">+{c.tools.length - 6}</span>}
-              </div>
-            </Choice>
-          ))}
+          {catalog.courses.map((c) => {
+            const sel = vm.course ? vm.course.split(',') : [];
+            const isSel = sel.includes(c.id);
+            const toggle = () => onChange({ course: (isSel ? sel.filter((x) => x !== c.id) : [...sel, c.id]).join(',') });
+            return (
+              <Choice key={c.id} selected={isSel} onClick={toggle}>
+                <div className="font-medium">{c.label}</div>
+                <div className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{c.description}</div>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {c.tools.slice(0, 6).map((tool) => (
+                    <span key={tool} className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{tool}</span>
+                  ))}
+                  {c.tools.length > 6 && <span className="text-[10px] text-muted-foreground">+{c.tools.length - 6}</span>}
+                </div>
+              </Choice>
+            );
+          })}
         </div>
       </Section>
 

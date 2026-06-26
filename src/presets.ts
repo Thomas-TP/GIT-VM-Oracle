@@ -208,13 +208,17 @@ export const COURSES: Record<string, CoursePreset> = {
 };
 
 export const isValidCourse = (id: string) => id === '' || Object.prototype.hasOwnProperty.call(COURSES, id);
+// Accept a comma-separated list of course ids (or empty). Used by multi-select.
+export const isValidCourses = (csv: string) =>
+  (csv ?? '').split(',').map((s) => s.trim()).filter(Boolean).every((id) => Object.prototype.hasOwnProperty.call(COURSES, id));
 
-// cloud-init user-data installing a course's tools (Linux only). undefined if no course.
-export function buildCourseUserData(courseId: string | null | undefined): string | undefined {
-  if (!courseId) return undefined;
-  const c = COURSES[courseId];
-  if (!c) return undefined;
-  return `${COURSE_SCRIPT_HEADER}\n${c.install}\n`;
+// cloud-init user-data installing the tools of one OR several courses (CSV ids). Linux.
+// undefined if no valid course. Header runs once, then each course's install block.
+export function buildCourseUserData(courses: string | null | undefined): string | undefined {
+  const ids = (courses ?? '').split(',').map((s) => s.trim()).filter((id) => COURSES[id]);
+  if (!ids.length) return undefined;
+  const installs = ids.map((id) => COURSES[id].install).join('\n');
+  return `${COURSE_SCRIPT_HEADER}\n${installs}\n`;
 }
 
 // Windows (Chocolatey) package mapping per course — best effort equivalents.
@@ -231,9 +235,11 @@ const COURSE_WIN: Record<string, string> = {
   python: 'python',
 };
 
-// PowerShell that installs Chocolatey then the course's tools (Windows). undefined if none.
-export function buildWindowsCourseInstall(courseId: string | null | undefined): string | undefined {
-  const pkgs = courseId ? COURSE_WIN[courseId] : undefined;
+// PowerShell that installs Chocolatey then the tools of one OR several courses (CSV ids).
+// Windows. undefined if none. Packages from all selected courses are merged + de-duplicated.
+export function buildWindowsCourseInstall(courses: string | null | undefined): string | undefined {
+  const ids = (courses ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const pkgs = [...new Set(ids.flatMap((id) => (COURSE_WIN[id] ?? '').split(' ').filter(Boolean)))].join(' ');
   if (!pkgs) return undefined;
   return [
     "Set-ExecutionPolicy Bypass -Scope Process -Force",

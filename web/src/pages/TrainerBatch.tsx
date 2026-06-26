@@ -104,12 +104,21 @@ function Form({ catalog, users }: { catalog: PresetCatalog; users: { email: stri
               <label className="block"><span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('newvm.storage')}</span>
                 <Select value={storage} onChange={(e) => setStorage(e.target.value)}>{storageList.map((s) => <option key={s.id} value={s.id} disabled={minGb > 0 && s.sizeGb < minGb}>{s.label}</option>)}</Select>
               </label>
-              <label className="block"><span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('newvm.course')}</span>
-                <Select value={course} onChange={(e) => setCourse(e.target.value)}>
-                  <option value="">{t('newvm.courseNone')}</option>
-                  {catalog.courses.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </Select>
-              </label>
+              <div className="block sm:col-span-2"><span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('newvm.course')}</span>
+                <div className="flex flex-wrap gap-2">
+                  {catalog.courses.map((c) => {
+                    const sel = course ? course.split(',') : [];
+                    const isSel = sel.includes(c.id);
+                    return (
+                      <button type="button" key={c.id}
+                        onClick={() => setCourse((isSel ? sel.filter((x) => x !== c.id) : [...sel, c.id]).join(','))}
+                        className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition ${isSel ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card text-muted-foreground hover:bg-muted'}`}>
+                        {c.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               <label className="block"><span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t('newvm.start')}</span>
                 <DatePicker value={start} onChange={setStart} />
               </label>

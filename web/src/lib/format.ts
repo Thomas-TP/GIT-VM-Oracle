@@ -1,11 +1,14 @@
 import i18n from '../i18n';
 
-// SQLite datetime('now') returns UTC "YYYY-MM-DD HH:MM:SS"
+// Accepts both SQLite datetime('now') ("YYYY-MM-DD HH:MM:SS", UTC, no TZ) and full ISO
+// strings (already carrying Z or an offset, e.g. dates saved via toISOString()).
+// Always rendered in Europe/Zurich so the displayed time matches the scheduling tz.
 export function fmtDate(iso?: string | null): string {
   if (!iso) return '—';
-  const d = new Date(iso.replace(' ', 'T') + 'Z');
+  const hasTz = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(iso);
+  const d = new Date(hasTz ? iso : iso.replace(' ', 'T') + 'Z');
   if (isNaN(d.getTime())) return iso;
-  return d.toLocaleString(i18n.language, { dateStyle: 'medium', timeStyle: 'short' });
+  return d.toLocaleString(i18n.language, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Europe/Zurich' });
 }
 
 // Compact uptime from an ISO launch time (e.g. "2d 4h", "5h 12m", "8m").

@@ -11,7 +11,7 @@ import {
   isValidPerf,
   isValidStorage,
   isValidOs,
-  isValidCourse,
+  isValidCourses,
   buildCourseUserData,
   buildWindowsCourseInstall,
   estimateMonthlyUsd,
@@ -388,7 +388,7 @@ app.post('/api/requests', apiAuth, async (c) => {
   const os = String(body.os ?? '');
   const purpose = String(body.purpose ?? '').trim();
   const course = String(body.course ?? '');
-  if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !isValidCourse(course) || !purpose) {
+  if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !isValidCourses(course) || !purpose) {
     return c.json({ error: 'invalid_request' }, 400);
   }
   // Some OS need a minimum root disk (Windows ≥ 30 Go).
@@ -433,7 +433,7 @@ app.post('/api/requests/batch', apiAuth, async (c) => {
     const perf = String(v.perf ?? ''), storage = String(v.storage ?? ''), os = String(v.os ?? '');
     const purpose = String(v.purpose ?? '').trim(), course = String(v.course ?? '');
     const name = String(v.name ?? '').trim().slice(0, 60);
-    if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !isValidCourse(course) || !purpose || !name) {
+    if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !isValidCourses(course) || !purpose || !name) {
       return c.json({ error: 'invalid_request' }, 400);
     }
     if (OS[os].minStorageGb && STORAGE[storage].sizeGb < OS[os].minStorageGb!) return c.json({ error: 'storage_too_small' }, 400);
@@ -1022,7 +1022,7 @@ app.post('/api/trainer/batch', apiTrainer, async (c) => {
   const emails: string[] = Array.isArray(body.userEmails)
     ? Array.from(new Set((body.userEmails as any[]).map((e) => String(e).trim().toLowerCase()).filter(Boolean) as string[]))
     : [];
-  if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !isValidCourse(course)) return c.json({ error: 'invalid_request' }, 400);
+  if (!isValidPerf(perf) || !isValidStorage(storage) || !isValidOs(os) || !isValidCourses(course)) return c.json({ error: 'invalid_request' }, 400);
   if (!baseName || !purpose || !groupName) return c.json({ error: 'invalid_request' }, 400);
   if (!Number.isInteger(count) || count < 1 || count > 30) return c.json({ error: 'invalid_count' }, 400);
   if (!emails.length || emails.length > count) return c.json({ error: 'invalid_users' }, 400);
